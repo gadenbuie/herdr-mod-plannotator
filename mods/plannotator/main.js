@@ -75,8 +75,10 @@ shift 4
 
 // The runs that ended and were never announced here: a log with `__exit` and no
 // `__told`. The label is the log's first line, the decision the JSON the CLI printed
-// at its end, and `__told` is written as the line is read, so one run is announced
-// once even across copies of the mod.
+// at its end, and the mark is written as the log is read — with this process's own
+// number, then read back: only the copy whose mark is the first one in the log prints,
+// so two copies woken at the same instant (the popup and the tab bar's) toast a
+// decision once between them, and neither can lose it by arriving second.
 const ANNOUNCE = `
 mkdir -p "$1" || exit 0
 cd "$1" || exit 0
@@ -84,10 +86,12 @@ for f in *.log; do
   [ -f "$f" ] || continue
   grep -q '^__exit' "$f" || continue
   grep -q '^__told' "$f" && continue
+  mark="__told $$"
+  echo "$mark" >>"$f"
+  [ "$(grep -m 1 '^__told' "$f")" = "$mark" ] || continue
   label=$(sed -n '1s/^__label //p' "$f")
   word=$(grep -o '"decision": *"[a-z]*"' "$f" | tail -n 1 | cut -d'"' -f4)
   printf '%s: %s\\n' "\${label:-Plannotator}" "\${word:-finished}"
-  echo '__told' >>"$f"
 done`;
 
 // Two shown copies (the panel and a tab of the same mod) both get a key command;
