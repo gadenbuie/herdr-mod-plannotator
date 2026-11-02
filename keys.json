@@ -1,9 +1,9 @@
 {
   "global": {
-    "cmd-alt-shift-i": "tab-host.open:plannotator",
+    "cmd-alt-shift-i": "plannotator.inbox",
     "cmd-alt-shift-p": "plannotator.palette",
     "cmd-alt-a": "plannotator.annotate",
-    "cmd-alt-i": "plannotator.inbox",
+    "cmd-alt-i": "tab-host.open:plannotator",
     "cmd-alt-l": "plannotator.last",
     "cmd-alt-r": "plannotator.review"
   }
