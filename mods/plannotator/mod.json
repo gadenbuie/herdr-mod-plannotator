@@ -2,5 +2,9 @@
   "place": "none",
   "title": "Plannotator",
   "focusable": true,
-  "tab": { "title": "Plannotator", "icon": "mods/plannotator/icon.svg" }
+  "tab": {
+    "title": "Plannotator",
+    "icon": "mods/plannotator/icon.svg",
+    "badge": "plannotator.waiting"
+  }
 }

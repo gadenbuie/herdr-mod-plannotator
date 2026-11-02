@@ -27,13 +27,18 @@ import { View, div, svg } from "gpui-kit";
 import { v_flex, h_flex, InputState, Input } from "gpui-base";
 import {
   spaces, focused, panes, exec, run, theme, props, openOverlay, closeOverlay,
-  notify, watchFolder, pickFolder, home, appHome, nextCommand, keys,
+  notify, watchFolder, pickFolder, home, appHome, nextCommand, keys, shared, setShared,
 } from "herdr";
 
 const ICONS = "mods/workspace-chrome";
 // The Inbox's store: one folder per project, one JSON record per line. It is watched for
 // changes; the list itself is asked of the Inbox server (see `READ`).
 const STORE = () => `${home()}/.plannotator/inbox`;
+// The number a tab-host button can wear while the panel is collapsed:
+// `tab.badge` in `mod.json` names this key, and tab-host draws whatever is in it.
+// Nothing reads it today (tab-host has no badge yet — see its `HANDOFF.md`), and
+// writing it costs one comparison per read.
+const BADGE = "plannotator.waiting";
 // The Inbox's own list model, over its loopback server. The records in `STORE` say who
 // wrote what; only the Inbox's own arithmetic turns that into "New since you looked",
 // "Waiting on you" and "Quiet" — it writes `person_seen_seq`, so it, and not a second
@@ -305,6 +310,10 @@ export default class Plannotator extends View {
         if (r.code !== 0) throw new Error(r.stderr || "Cannot read the Plannotator Inbox");
         this.threads = readThreads(r.stdout);
         this.error = null;
+        // What the tab bar may show while this panel is collapsed. `setShared`
+        // re-renders every mod, so it is written only when the number changes.
+        const want = this.threads.filter((t) => t.state === "answer").length;
+        if (shared(BADGE) !== want) setShared(BADGE, want);
       } catch (e) {
         this.error = String(e?.message ?? e).split("\n")[0].slice(0, 160);
       } finally {
