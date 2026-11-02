@@ -35,6 +35,9 @@ const LIST = 'cd "$1" || exit 0; n=0; for p in * .[!.]* ..?*; do [ -e "$p" ] || 
 // one press must start one tab.
 let claimed = 0;
 
+// How many waiting threads the panel lists; the rest are one row into the Inbox.
+const SHOWN = 5;
+
 // Where this space is now: its focused pane's folder, else where it was made.
 function folderOf(space) {
   const f = focused();
@@ -159,6 +162,10 @@ export default class Plannotator extends View {
     this.ready = false;
     this.error = null;
     this.at = 0;
+    // `at` is the palette's highlighted row; `cursor` is the panel's.
+    this.cursor = 0;
+    // A launch closes the window it was picked from; the close must land once.
+    this.closed = false;
     this.handle = cx.focus_handle();
     // A floating window draws no card of its own: Herdr frames it. It gets the
     // keyboard when it opens, so Esc closes it.
@@ -195,10 +202,11 @@ export default class Plannotator extends View {
         claimed = now;
         const at = folderOf(space());
         if (command === "palette") this.openPalette();
-        else if (command === "last") start(["last"], "Plannotator: last message");
-        else if (command === "review") start(["review"], "Plannotator: review");
-        else if (command === "annotate") at ? start(["annotate", at], "Plannotator: annotate") : this.pick();
-        else if (command === "inbox") openInbox();
+        else if (command === "last") this.launch(() => start(["last"], "Plannotator: last message"));
+        else if (command === "review") this.launch(() => start(["review"], "Plannotator: review"));
+        else if (command === "annotate") {
+          this.launch(() => (at ? start(["annotate", at], "Plannotator: annotate") : this.pick()));
+        } else if (command === "inbox") this.launch(() => openInbox());
         cx.notify();
       }
     });
@@ -263,6 +271,21 @@ export default class Plannotator extends View {
     start(["annotate", path], dir ? "Plannotator: annotate folder" : "Plannotator: annotate file", folder);
   }
 
+  // The tree's visible rows, in the order they draw: the space folder's children,
+  // then the open folders' under them. Drawing and keys both read this one list.
+  treeRows() {
+    const rows = [];
+    const walk = (path, depth) => {
+      for (const e of this.kids.get(path) ?? []) {
+        const child = `${path}/${e.name}`;
+        rows.push({ path: child, name: e.name, dir: e.dir, depth });
+        if (e.dir && this.open.has(child)) walk(child, depth + 1);
+      }
+    };
+    if (this.folder && this.open.has(this.folder)) walk(this.folder, 1);
+    return rows;
+  }
+
   // This mod, as its own palette: a popup over the window, closed by Esc or a pick.
   openPalette() {
     openOverlay({ mod: "plannotator", kind: "popup", width: 520, height: 340, props: { mode: "palette" } });
@@ -275,7 +298,16 @@ export default class Plannotator extends View {
 
   close() {
     const overlay = props()?.overlay;
-    if (overlay) closeOverlay(overlay);
+    if (!overlay || this.closed) return;
+    this.closed = true;
+    closeOverlay(overlay);
+  }
+
+  // A pick hands the person to a page in their browser, so the floating window
+  // steps aside behind it. A tab of this mod has no overlay, so there it is quiet.
+  launch(fn) {
+    this.close();
+    fn();
   }
 
   // Herdr has a folder picker, not a file one: a file comes from the panel's own
@@ -284,6 +316,42 @@ export default class Plannotator extends View {
     pickFolder({ prompt: "Annotate" }).then((path) => {
       if (path) start(["annotate", path], "Plannotator: annotate", path);
     }).catch((e) => fail(e?.message));
+  }
+
+  // Every row the panel draws that can be picked, top to bottom, by id: the threads
+  // waiting on the person, then the annotate rows, then the tree. The keys walk this
+  // order, so the row that is highlighted is always the row Return runs.
+  rowIds() {
+    const ids = [];
+    for (let i = 0; i < Math.min(this.waiting.length, SHOWN); i++) ids.push(`t${i}`);
+    if (this.waiting.length > SHOWN) ids.push("more");
+    ids.push("last", "review");
+    if (this.folder) {
+      ids.push("space", "tree");
+      for (const row of this.treeRows()) ids.push(`f:${row.path}`);
+    }
+    ids.push("pick");
+    return ids;
+  }
+
+  // Return on the highlighted row: folders open, everything else hands the person
+  // to the browser and takes the window down with it.
+  runRow(id, cx) {
+    if (!id) return;
+    if (/^t\d+$/.test(id) || id === "more") return this.launch(() => openInbox());
+    if (id.startsWith("f:")) {
+      const row = this.treeRows().find((r) => r.path === id.slice(2));
+      if (!row) return;
+      if (row.dir) this.toggle(row.path, cx);
+      else this.launch(() => this.annotate(row.path, false));
+      return;
+    }
+    const at = this.folder;
+    if (id === "last") return this.launch(() => start(["last"], "Plannotator: last message"));
+    if (id === "review") return this.launch(() => start(["review"], "Plannotator: review"));
+    if (id === "space" && at) return this.launch(() => this.annotate(at, true));
+    if (id === "tree" && at) return this.toggle(at, cx);
+    if (id === "pick") return this.launch(() => this.pick());
   }
 
   rows() {
@@ -371,9 +439,15 @@ export default class Plannotator extends View {
 
   renderPanel() {
     const t = theme(), at = this.folder, near = at ? at.replace(home(), "~") : null;
-    const shown = 5, waiting = this.waiting.slice(0, shown), more = this.waiting.length - waiting.length;
+    const waiting = this.waiting.slice(0, SHOWN), more = this.waiting.length - waiting.length;
     const open = Boolean(at && this.open.has(at));
     const kids = (path) => this.kids.get(path) ?? [];
+    // The row the keys are on. One list for drawing and keys: the highlight can't
+    // drift from what Return does.
+    const ids = this.rowIds(), sel = (id) => ids[this.cursor] === id;
+    // A click on a row that stays open (a folder) moves the keys there too, so the
+    // highlight and the mouse never point at two different rows.
+    const hit = (id) => { const i = ids.indexOf(id); if (i >= 0) this.cursor = i; };
     const here = (th) => {
       const root = th.project?.root;
       return Boolean(root && at && (at === root || at.startsWith(`${root}/`) || root.startsWith(`${at}/`)));
@@ -384,8 +458,13 @@ export default class Plannotator extends View {
       const expanded = this.open.has(path);
       return h_flex().id(`pl-f-${path}`).h(24).flex_none().mx(6).pr(8).gap(6).rounded(6).items_center()
         .pl(20 + Math.min(depth, 8) * 12)
+        .when(sel(`f:${path}`), (el) => el.bg(t.selected))
         .hover((s) => s.bg(t.hover)).cursor_pointer()
-        .on_click((_e, cx) => (dir ? this.toggle(path, cx) : this.annotate(path, false)))
+        .on_click((_e, cx) => {
+          if (!dir) return this.launch(() => this.annotate(path, false));
+          hit(`f:${path}`);
+          this.toggle(path, cx);
+        })
         .on_mouse_down("right", (_e, cx) => { cx.stop_propagation(); this.openMenu(path, dir); })
         .when(dir, (el) => el.child(svg(`${ICONS}/${expanded ? "chevron-down" : "chevron-right"}.svg`)
           .size(12).flex_none().text_color(t.dim)))
@@ -395,24 +474,17 @@ export default class Plannotator extends View {
         .when(dir, (el) => el.child(div().id(`pl-pen-${path}`).size(18).flex_none().flex().items_center()
           .justify_center().rounded(5).text_color(t.dim)
           .on_mouse_down("left", (_e, cx) => cx.stop_propagation())
-          .on_click(() => this.annotate(path, true))
+          .on_click(() => this.launch(() => this.annotate(path, true)))
           .child(svg(`${ICONS}/square-pen.svg`).size(12))));
     };
-    // Every row the tree shows: the space folder's children, and the open ones under them.
-    const rows = [];
-    const walk = (path, depth) => {
-      for (const e of kids(path)) {
-        const child = `${path}/${e.name}`;
-        rows.push(node(child, e.name, e.dir, depth));
-        if (e.dir && this.open.has(child)) walk(child, depth + 1);
-      }
-    };
-    if (at && open) walk(at, 1);
+    // Every row the tree shows, as the tree lists them.
+    const rows = this.treeRows().map((e) => node(e.path, e.name, e.dir, e.depth));
     // One of the annotate things: a 14 px icon, the name, hover fills.
     const action = (id, icon, label, go) => h_flex().id(`pl-a-${id}`).h(30).flex_none().px(14).gap(9).items_center()
-      .hover((s) => s.bg(t.hover)).cursor_pointer().on_click(go)
+      .when(sel(id), (el) => el.bg(t.selected))
+      .hover((s) => s.bg(t.hover)).cursor_pointer().on_click(() => this.launch(go))
       .child(svg(`${ICONS}/${icon}.svg`).size(14).flex_none().text_color(t.muted))
-      .child(div().flex_1().min_w(0).truncate().text_color(t.muted).child(label));
+      .child(div().flex_1().min_w(0).truncate().text_color(sel(id) ? t.foreground : t.muted).child(label));
     const label = (text) => h_flex().h(24).flex_none().px(14).items_center()
       .child(div().flex_1().text_size(11).text_color(t.dim).child(text));
     // A popup sizes itself to its content, so the floating copy says its own size:
@@ -422,8 +494,15 @@ export default class Plannotator extends View {
       .when(this.floating, (el) => el.w(380).h(620).flex_none())
       .when(!this.floating, (el) => el.rounded(10).bg(t.background).border_1().border_color(t.border))
       .when(this.floating, (el) => el.track_focus(this.handle).on_key_down((e, cx) => {
-        if (e.key !== "escape") return;
-        this.close();
+        // Stops at the ends, as the palette does: wrapping jumps out of sight.
+        const last = Math.max(0, ids.length - 1);
+        if (this.cursor > last) this.cursor = last;
+        if (e.key === "down") this.cursor = Math.min(this.cursor + 1, last);
+        else if (e.key === "up") this.cursor = Math.max(this.cursor - 1, 0);
+        else if (e.key === "enter") this.runRow(ids[this.cursor], cx);
+        else if (e.key === "escape") this.close();
+        else return;
+        cx.stop_propagation();
         cx.notify();
       }))
       .text_size(13).text_color(t.foreground)
@@ -433,7 +512,7 @@ export default class Plannotator extends View {
           .text_size(10.5).child(String(this.waiting.length))))
         .child(div().flex_1())
         .child(this.iconButton("pl-palette", "search", () => this.openPalette()))
-        .child(this.iconButton("pl-open", "file-text", () => openInbox()))
+        .child(this.iconButton("pl-open", "file-text", () => this.launch(() => openInbox())))
         .when(this.floating, (el) => el.child(this.iconButton("pl-close", "x", () => this.close()))))
       .child(v_flex().id("pl-scroll").flex_1().min_h(0).overflow_y_scrollbar().items_center()
         .child(v_flex().id("pl-body").w_full().max_w(760).py(4).pb(10)
@@ -444,14 +523,16 @@ export default class Plannotator extends View {
             .when(Boolean(this.error), (el) => el.child(div().text_size(11.5).text_color(t.blocked).child(this.error)))))
           .children(waiting.map((th, i) =>
             v_flex().id(`pl-t-${i}`).flex_none().px(12).py(6).mx(6).gap(2).rounded(7)
-              .hover((s) => s.bg(t.hover)).cursor_pointer().on_click(() => openInbox())
+              .when(sel(`t${i}`), (el) => el.bg(t.selected))
+              .hover((s) => s.bg(t.hover)).cursor_pointer().on_click(() => this.launch(() => openInbox()))
               .child(h_flex().gap(6).items_center()
                 .child(div().flex_1().min_w(0).truncate().text_size(11).text_color(here(th) ? t.accent : t.dim)
                   .child(th.project?.name ?? ""))
                 .child(div().flex_none().text_size(11).text_color(t.dim).child(ago(th.at))))
               .child(div().truncate().text_color(t.muted).child(th.subject || "(no subject)"))))
           .when(more > 0, (el) => el.child(h_flex().id("pl-more").h(28).flex_none().mx(6).px(12).items_center().rounded(7)
-            .hover((s) => s.bg(t.hover)).cursor_pointer().on_click(() => openInbox())
+            .when(sel("more"), (s) => s.bg(t.selected))
+            .hover((s) => s.bg(t.hover)).cursor_pointer().on_click(() => this.launch(() => openInbox()))
             .child(div().text_size(11.5).text_color(t.dim).child(`${more} more in the Inbox`))))
           .child(h_flex().h(24).flex_none().px(14).mt(10).items_center()
             .child(div().flex_1().text_size(11).text_color(t.dim).child("Annotate")))
@@ -462,14 +543,16 @@ export default class Plannotator extends View {
           // all of it. The tree under it is for picking one file.
           .when(Boolean(at), (el) => el
             .child(h_flex().id("pl-space").h(30).flex_none().px(14).gap(9).items_center()
+              .when(sel("space"), (s) => s.bg(t.selected))
               .hover((s) => s.bg(t.hover)).cursor_pointer()
-              .on_click(() => this.annotate(at, true))
+              .on_click(() => this.launch(() => this.annotate(at, true)))
               .on_mouse_down("right", (_e, cx) => { cx.stop_propagation(); this.openMenu(at, true); })
               .child(svg(`${ICONS}/layers.svg`).size(14).flex_none().text_color(t.muted))
-              .child(div().flex_none().text_color(t.muted).child("This space"))
+              .child(div().flex_none().text_color(sel("space") ? t.foreground : t.muted).child("This space"))
               .child(div().flex_1().min_w(0).truncate().text_size(11).text_color(t.dim).child(near ?? "")))
             .child(h_flex().id("pl-tree").h(26).flex_none().mx(6).pl(20).pr(8).gap(6).rounded(6).items_center()
-              .hover((s) => s.bg(t.hover)).cursor_pointer().on_click((_e, cx) => this.toggle(at, cx))
+              .when(sel("tree"), (s) => s.bg(t.selected))
+              .hover((s) => s.bg(t.hover)).cursor_pointer().on_click((_e, cx) => { hit("tree"); this.toggle(at, cx); })
               .child(svg(`${ICONS}/${open ? "chevron-down" : "chevron-right"}.svg`).size(12).flex_none().text_color(t.dim))
               .child(svg(`${ICONS}/files.svg`).size(13).flex_none().text_color(t.muted))
               .child(div().flex_1().min_w(0).truncate().text_color(t.muted)
@@ -500,7 +583,7 @@ export default class Plannotator extends View {
       .children(items.map((it, i) =>
         h_flex().id(`pl-m-${i}`).h(31).flex_none().px(8).gap(9).rounded(7).items_center()
           .hover((s) => s.bg(t.hover))
-          .on_click(() => { this.close(); it.run(); })
+          .on_click(() => this.launch(it.run))
           .child(svg(`${ICONS}/${it.icon}.svg`).size(14).flex_none().text_color(t.muted))
           .child(div().flex_1().min_w(0).truncate().child(it.label))));
   }
