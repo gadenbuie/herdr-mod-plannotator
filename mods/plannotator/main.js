@@ -3,10 +3,11 @@
 // Herdr can't draw a web page, so every Plannotator surface stays in the person's
 // browser. This panel says what waits in the Inbox (threads whose newest message
 // is an agent's), opens the Inbox, and starts `plannotator last | review |
-// annotate` in a new tab of the space, where the CLI prints the page's address
-// and holds the decision until the person makes it. Its file tree is how a
-// single file or folder is annotated: the space's folder first, then whatever
-// the person opens.
+// annotate` in the background: the CLI prints the page's address, the browser
+// opens it, and the decision comes out at the end of the run's log with the
+// desktop's own notification. No tab, no window. Its file tree is how a single
+// file or folder is annotated: the space's folder first, then whatever the person
+// opens.
 //
 // The panel is a floating window (`mod.open`, the top of `mod.json`), so it is
 // there when the person asks for it and gone when they don't. The same mod draws
@@ -17,7 +18,7 @@ import { View, div, svg } from "gpui-kit";
 import { v_flex, h_flex, InputState, Input } from "gpui-base";
 import {
   spaces, focused, panes, exec, run, theme, props, openOverlay, closeOverlay,
-  notify, watchFolder, pickFolder, home, nextCommand, keys,
+  notify, watchFolder, pickFolder, home, appHome, nextCommand, keys,
 } from "herdr";
 
 const ICONS = "mods/workspace-chrome";
@@ -31,8 +32,57 @@ const LIST = 'cd "$1" || exit 0; n=0; for p in * .[!.]* ..?*; do [ -e "$p" ] || 
   + '[ "$p" = .git ] && continue; if [ -d "$p" ] && [ ! -L "$p" ]; then k=d; else k=f; fi; '
   + 'printf "%s\\0%s\\0" "$k" "$p"; n=$((n+1)); [ "$n" -ge 200 ] && break; done';
 
-// Two shown copies (this panel and a tab of the same mod) both get a key command;
-// one press must start one tab.
+// Where a background run keeps its log: the address the CLI prints, then the
+// decision it ends with. Herdr's own folder for this mod, never the person's.
+const RUNS = () => `${appHome()}/data/plannotator/sessions`;
+
+// A session with no tab and no window. The CLI is the same one a terminal would run:
+// it prints the page's address (the browser opens by itself) and holds until the
+// person decides. Everything to show comes out of the CLI's own output, nothing
+// depends on this mod being on screen: the subshell keeps that output in a log,
+// writes `__exit <code>` when the run is over, and then says so the way the desktop
+// does — `notify-send` on Linux, a banner from `osascript` on macOS. A missing
+// notifier is silent, by design; the log is still there, and the panel reads it when
+// it next opens (`ANNOUNCE`).
+const RUN = `
+mkdir -p "$1" || exit 0
+cd "$2" || exit 0
+log="$1/$3.log"
+label="$4"
+shift 4
+(
+  printf '__label %s\\n' "$label" >"$log"
+  nohup "$@" >>"$log" 2>&1
+  echo "__exit $?" >>"$log"
+  word=$(grep -o '"decision": *"[a-z]*"' "$log" | tail -n 1 | cut -d'"' -f4)
+  [ -n "$word" ] || word=finished
+  if command -v notify-send >/dev/null 2>&1; then
+    notify-send -a Plannotator -t 6000 Plannotator "$label: $word" >/dev/null 2>&1
+  elif [ "$(uname)" = Darwin ]; then
+    osascript -e 'on run a' -e 'display notification (item 2 of a) with title (item 1 of a)' -e 'end run' \
+      Plannotator "$label: $word" >/dev/null 2>&1
+  fi
+) >/dev/null 2>&1 &`;
+
+// The runs that ended and were never announced here: a log with `__exit` and no
+// `__told`. The label is the log's first line, the decision the JSON the CLI printed
+// at its end, and `__told` is written as the line is read, so one run is announced
+// once even across copies of the mod.
+const ANNOUNCE = `
+mkdir -p "$1" || exit 0
+cd "$1" || exit 0
+for f in *.log; do
+  [ -f "$f" ] || continue
+  grep -q '^__exit' "$f" || continue
+  grep -q '^__told' "$f" && continue
+  label=$(sed -n '1s/^__label //p' "$f")
+  word=$(grep -o '"decision": *"[a-z]*"' "$f" | tail -n 1 | cut -d'"' -f4)
+  printf '%s: %s\\n' "\${label:-Plannotator}" "\${word:-finished}"
+  echo '__told' >>"$f"
+done`;
+
+// Two shown copies (the panel and a tab of the same mod) both get a key command;
+// one press must start one run.
 let claimed = 0;
 
 // How many waiting threads the panel lists; the rest are one row into the Inbox.
@@ -47,13 +97,16 @@ function folderOf(space) {
 
 const space = () => spaces().find((s) => s.active) ?? null;
 
-// The CLI in a new tab of this space: it prints the page's address and waits for
-// the decision there, and the page itself opens in the browser.
-function start(args, name, folder) {
-  const s = space(), at = folder ?? folderOf(s), tab = { name, argv: ["plannotator", ...args] };
-  if (at) tab.folder = at;
-  if (s?.id) tab.space = s.id;
-  run("tab.new", tab);
+// A session in the background, in that folder: `label` is what the run calls itself
+// (it names the log and the notification), and `args` is the CLI's own argument list.
+// `--json` is what makes the decision readable at the end of the log; it changes no
+// part of the page the person sees.
+function start(args, label, folder) {
+  const at = folder ?? folderOf(space());
+  const stamp = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
+  const slug = label.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+  exec("sh", ["-c", RUN, "plannotator", RUNS(), at ?? home(), `${stamp}-${slug}`, label, "plannotator", ...args, "--json"])
+    .catch((e) => fail(e?.message));
 }
 
 function fail(body) {
@@ -182,6 +235,8 @@ export default class Plannotator extends View {
     // The palette and the menus hold no data of their own: the panel reads the store.
     if (this.mode !== "panel") return;
     this.reload(cx);
+    // What the runs decided while the panel was shut is the first thing it says.
+    this.announce(cx);
     // The store is live: a message anywhere in it shows up at once, no polling.
     cx.spawn(async (cx) => {
       for (;;) {
@@ -189,8 +244,16 @@ export default class Plannotator extends View {
         this.reload(cx);
       }
     });
+    // So are the runs: a decision that lands while the panel is open is a toast as
+    // soon as its log ends, and the minute timer picks up whatever a watcher missed.
+    cx.spawn(async (cx) => {
+      for (;;) {
+        try { await watchFolder(RUNS()); } catch { return; }
+        this.announce(cx);
+      }
+    });
     // Ages ("2h") and an Inbox that starts later need no watcher; this reads, it doesn't spin.
-    cx.timer.every(60000, (cx) => this.reload(cx));
+    cx.timer.every(60000, (cx) => { this.reload(cx); this.announce(cx); });
     // keys.json sends `plannotator.palette | last | review | annotate | inbox` here,
     // and `focus` when a popup over the window closes.
     cx.spawn(async (cx) => {
@@ -202,10 +265,10 @@ export default class Plannotator extends View {
         claimed = now;
         const at = folderOf(space());
         if (command === "palette") this.openPalette();
-        else if (command === "last") this.launch(() => start(["last"], "Plannotator: last message"));
-        else if (command === "review") this.launch(() => start(["review"], "Plannotator: review"));
+        else if (command === "last") this.launch(() => start(["last"], "Last message"));
+        else if (command === "review") this.launch(() => start(["review"], "Review changes"));
         else if (command === "annotate") {
-          this.launch(() => (at ? start(["annotate", at], "Plannotator: annotate") : this.pick()));
+          this.launch(() => (at ? start(["annotate", at], "Annotate all files") : this.pick()));
         } else if (command === "inbox") this.launch(() => openInbox());
         cx.notify();
       }
@@ -235,6 +298,25 @@ export default class Plannotator extends View {
         this.ready = true;
         cx.notify();
       }
+    });
+  }
+
+  // A run that ended is announced in Herdr's own toast. The desktop banner said so
+  // when it happened; this says it again the moment a copy of this mod is on screen,
+  // which is the only time a mod can post one — a closed panel has no code at all.
+  // `ANNOUNCE` marks each log it reads, so nothing is announced twice.
+  announce(cx) {
+    cx.spawn(async () => {
+      let out;
+      try {
+        out = await exec("sh", ["-c", ANNOUNCE, "plannotator", RUNS()]);
+      } catch {
+        return;
+      }
+      if (out.code !== 0) return;
+      const lines = String(out.stdout ?? "").split("\n").map((s) => s.trim()).filter(Boolean);
+      for (const line of lines.slice(0, 3)) notify({ title: "Plannotator", body: line });
+      if (lines.length > 3) notify({ title: "Plannotator", body: `${lines.length - 3} more in the sessions folder` });
     });
   }
 
@@ -268,7 +350,7 @@ export default class Plannotator extends View {
 
   annotate(path, dir) {
     const folder = dir ? path : path.replace(/\/[^/]+$/, "");
-    start(["annotate", path], dir ? "Plannotator: annotate folder" : "Plannotator: annotate file", folder);
+    start(["annotate", path], dir ? "Annotate folder" : "Annotate file", folder);
   }
 
   // The tree's visible rows, in the order they draw: the space folder's children,
@@ -314,7 +396,7 @@ export default class Plannotator extends View {
   // list (right-click) or a path typed into the Inbox.
   pick() {
     pickFolder({ prompt: "Annotate" }).then((path) => {
-      if (path) start(["annotate", path], "Plannotator: annotate", path);
+      if (path) start(["annotate", path], "Annotate folder", path);
     }).catch((e) => fail(e?.message));
   }
 
@@ -347,8 +429,8 @@ export default class Plannotator extends View {
       return;
     }
     const at = this.folder;
-    if (id === "last") return this.launch(() => start(["last"], "Plannotator: last message"));
-    if (id === "review") return this.launch(() => start(["review"], "Plannotator: review"));
+    if (id === "last") return this.launch(() => start(["last"], "Last message"));
+    if (id === "review") return this.launch(() => start(["review"], "Review changes"));
     if (id === "space" && at) return this.launch(() => this.annotate(at, true));
     if (id === "tree" && at) return this.toggle(at, cx);
     if (id === "pick") return this.launch(() => this.pick());
@@ -358,11 +440,11 @@ export default class Plannotator extends View {
     const at = folderOf(space()), s = space(), near = at ? at.replace(home(), "~") : null;
     const list = [
       { id: "last", title: "Annotate the last message", words: "last message reply agent session", icon: "square-pen",
-        key: "last", run: () => start(["last"], "Plannotator: last message") },
+        key: "last", run: () => start(["last"], "Last message") },
       { id: "review", title: "Review my changes", words: "review diff git approve merge", icon: "git-compare",
-        key: "review", run: () => start(["review"], "Plannotator: review") },
+        key: "review", run: () => start(["review"], "Review changes") },
       { id: "annotate", title: "Annotate all files", words: `annotate folder space ${at ?? ""}`, icon: "folder",
-        key: "annotate", hint: near, run: () => (at ? start(["annotate", at], "Plannotator: annotate") : this.pick()) },
+        key: "annotate", hint: near, run: () => (at ? start(["annotate", at], "Annotate all files") : this.pick()) },
       { id: "pick", title: "Annotate another folder…", words: "annotate folder pick markdown html url", icon: "folder-plus",
         key: null, run: () => this.pick() },
       { id: "inbox", title: "Open the Inbox", words: "inbox threads messages questions waiting", icon: "file-text",
@@ -536,8 +618,8 @@ export default class Plannotator extends View {
             .child(div().text_size(11.5).text_color(t.dim).child(`${more} more in the Inbox`))))
           .child(h_flex().h(24).flex_none().px(14).mt(10).items_center()
             .child(div().flex_1().text_size(11).text_color(t.dim).child("Annotate")))
-          .child(action("last", "square-pen", "Last message", () => start(["last"], "Plannotator: last message")))
-          .child(action("review", "git-compare", "Review changes", () => start(["review"], "Plannotator: review")))
+          .child(action("last", "square-pen", "Last message", () => start(["last"], "Last message")))
+          .child(action("review", "git-compare", "Review changes", () => start(["review"], "Review changes")))
           // "This space" is one of the annotate rows: same height, icon and type as
           // the two above it, the folder it means at its right, and a click annotates
           // all of it. The tree under it is for picking one file.
@@ -570,8 +652,8 @@ export default class Plannotator extends View {
     const items = [
       { icon: dir ? "folder" : "square-pen", label: dir ? "Annotate this folder" : "Annotate this file", run: () => this.annotate(path, dir) },
       ...(spaceFolder && spaceFolder !== path ? [{ icon: "layers", label: "Annotate all files",
-        run: () => start(["annotate", spaceFolder], "Plannotator: annotate folder", spaceFolder) }] : []),
-      { icon: "git-compare", label: "Review changes here", run: () => start(["review"], "Plannotator: review", parent) },
+        run: () => start(["annotate", spaceFolder], "Annotate all files", spaceFolder) }] : []),
+      { icon: "git-compare", label: "Review changes here", run: () => start(["review"], "Review changes", parent) },
     ];
     return v_flex().id("pl-menu").track_focus(this.handle).w_full().min_h(0).p(5).bg(t.popover).text_size(12.8)
       .on_key_down((e, cx) => {
