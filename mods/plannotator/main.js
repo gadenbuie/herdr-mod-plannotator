@@ -1,27 +1,27 @@
-// Plannotator on a key: what is waiting in the Inbox, and its actions.
+// Plannotator in the tab bar: what is waiting in the Inbox, and its actions.
 //
 // Herdr can't draw a web page, so every Plannotator surface stays in the person's
-// browser. This panel says what waits in the Inbox (threads whose newest message
-// is an agent's), opens the Inbox, and starts `plannotator last | review |
-// annotate` in the background: the CLI prints the page's address, the browser
-// opens it, and the decision comes out at the end of the run's log with the
-// desktop's own notification. No tab, no window. Its file tree is how a single
-// file or folder is annotated: the space's folder first, then whatever the person
-// opens.
+// browser. This panel says what waits in the Inbox — its own list of threads, with a
+// dot for what each needs: yellow when the Inbox has it waiting on the person, blue
+// when it is new since they last looked, grey when it is read — opens the Inbox, and
+// starts
+// `plannotator last | review | annotate` in the background: the CLI prints the page's
+// address, the browser opens it, and the decision comes out at the end of the run's
+// log. No tab, no window. Its file tree is how a single file or folder is annotated:
+// the space's folder first, then whatever the person opens.
 //
-// The panel is a floating window (`mod.open`, the top of `mod.json`), so it is
-// there when the person asks for it and gone when they don't. The same mod draws
-// its own command palette (`props().mode === "palette"`): the app's palette lists
-// Herdr's commands only, so this is the way in by keyboard.
+// The panel has one home: the side panel's Plannotator tab. `mod.json` declares a
+// `tab`, which is a manifest the `tab-host` mod reads — it draws a Plannotator button
+// in the tab bar beside Files and Changes and adds a block for this mod to the side
+// panel's stack. That copy (no props, no overlay) is the panel, and it is the copy
+// that matters most: once the person has opened the tab, it stays alive even while
+// the panel is hidden, so its watcher is on screen all the time and a decision becomes
+// a Herdr toast the moment it lands. Without `tab-host` the declaration is inert and
+// `place: "none"` keeps the mod out of the window.
 //
-// `mod.json` also declares a `tab`, which is a manifest the `tab-host` mod reads: it
-// draws a Plannotator button in the tab bar beside Files and Changes and adds a
-// block for this mod to the side panel's stack. That copy is the panel too (no
-// props, no overlay: nothing floats), and it is the copy that matters most — once
-// the person has opened the tab, the copy stays alive even while the panel is
-// hidden, so its watcher is on screen all the time and a decision becomes a Herdr
-// toast the moment it lands. Without `tab-host` installed the declaration is inert
-// and `place: "none"` keeps the mod out of the window.
+// The same mod still draws its own command palette (`props().mode === "palette"`) and
+// a row's menu (`"menu"`) as overlays: the app's palette lists Herdr's commands only,
+// so this is the way in by keyboard. Those two are the only copies that float.
 
 import { View, div, svg } from "gpui-kit";
 import { v_flex, h_flex, InputState, Input } from "gpui-base";
@@ -31,11 +31,22 @@ import {
 } from "herdr";
 
 const ICONS = "mods/workspace-chrome";
-// The Inbox's store: one folder per project, one JSON record per line.
+// The Inbox's store: one folder per project, one JSON record per line. It is watched for
+// changes; the list itself is asked of the Inbox server (see `READ`).
 const STORE = () => `${home()}/.plannotator/inbox`;
-// Every project, its project.json, then the tail of its messages: one process.
-const READ = 'cd "$1" || exit 0; for d in */; do f="${d}messages.jsonl"; [ -f "$f" ] || continue; '
-  + 'echo "P ${d%/}"; head -n 1 "${d}project.json" 2>/dev/null; tail -n 20 "$f"; done';
+// The Inbox's own list model, over its loopback server. The records in `STORE` say who
+// wrote what; only the Inbox's own arithmetic turns that into "New since you looked",
+// "Waiting on you" and "Quiet" — it writes `person_seen_seq`, so it, and not a second
+// guess here, is what "unread" means. One `curl`, nothing to install: the port is in
+// `inbox.json`, and the route is the one the Inbox page itself opens with.
+const READ = String.raw`
+cd "$1" || exit 0
+[ -f inbox.json ] || exit 0
+p=$(sed -n 's/.*"port": *\([0-9][0-9]*\).*/\1/p' inbox.json | head -n 1)
+[ -n "$p" ] || exit 0
+command -v curl >/dev/null 2>&1 || exit 0
+curl -s -m 3 "http://127.0.0.1:$p/api/inbox/threads" || printf '{"error":"The Inbox is not running"}'
+`;
 // One level of a folder, read once per folder, the first time its row opens.
 const LIST = 'cd "$1" || exit 0; n=0; for p in * .[!.]* ..?*; do [ -e "$p" ] || [ -L "$p" ] || continue; '
   + '[ "$p" = .git ] && continue; if [ -d "$p" ] && [ ! -L "$p" ]; then k=d; else k=f; fi; '
@@ -47,12 +58,10 @@ const RUNS = () => `${appHome()}/data/plannotator/sessions`;
 
 // A session with no tab and no window. The CLI is the same one a terminal would run:
 // it prints the page's address (the browser opens by itself) and holds until the
-// person decides. Everything to show comes out of the CLI's own output, nothing
-// depends on this mod being on screen: the subshell keeps that output in a log,
-// writes `__exit <code>` when the run is over, and then says so the way the desktop
-// does — `notify-send` on Linux, a banner from `osascript` on macOS. A missing
-// notifier is silent, by design; the log is still there, and the panel reads it when
-// it next opens (`ANNOUNCE`).
+// person decides. Everything to show comes out of the CLI's own output, so nothing
+// depends on this mod being on screen: the subshell keeps that output in a log and
+// writes `__exit <code>` when the run is over. No desktop notification — the panel's
+// tab is always there to turn the log into a Herdr toast (`ANNOUNCE`).
 const RUN = `
 mkdir -p "$1" || exit 0
 cd "$2" || exit 0
@@ -63,22 +72,15 @@ shift 4
   printf '__label %s\\n' "$label" >"$log"
   nohup "$@" >>"$log" 2>&1
   echo "__exit $?" >>"$log"
-  word=$(grep -o '"decision": *"[a-z]*"' "$log" | tail -n 1 | cut -d'"' -f4)
-  [ -n "$word" ] || word=finished
-  if command -v notify-send >/dev/null 2>&1; then
-    notify-send -a Plannotator -t 6000 Plannotator "$label: $word" >/dev/null 2>&1
-  elif [ "$(uname)" = Darwin ]; then
-    osascript -e 'on run a' -e 'display notification (item 2 of a) with title (item 1 of a)' -e 'end run' \
-      Plannotator "$label: $word" >/dev/null 2>&1
-  fi
 ) >/dev/null 2>&1 &`;
 
 // The runs that ended and were never announced here: a log with `__exit` and no
 // `__told`. The label is the log's first line, the decision the JSON the CLI printed
 // at its end, and the mark is written as the log is read — with this process's own
 // number, then read back: only the copy whose mark is the first one in the log prints,
-// so two copies woken at the same instant (the popup and the tab bar's) toast a
-// decision once between them, and neither can lose it by arriving second.
+// so two copies woken at the same instant (the panel, and another copy of it in a
+// layout) toast a decision once between them, and neither can lose it by arriving
+// second.
 const ANNOUNCE = `
 mkdir -p "$1" || exit 0
 cd "$1" || exit 0
@@ -133,55 +135,53 @@ function openInbox() {
   }).catch((e) => fail(e?.message));
 }
 
-// The line a message says itself with: its subject, else its first line of body
-// without the markdown that a preview shouldn't show.
-function subjectOf(record) {
-  const line = (record.subject || "").trim()
-    || String(record.body || "").split("\n").find((s) => s.trim())
-    || "";
-  return line.replace(/^[\s#>*_-]+/, "").replace(/\*\*|__|`/g, "").trim();
+// Each thread, with the dot it gets: `answer` when something in it is still open for
+// the person, `unread` when the Inbox says it is new since they last looked, `read`
+// otherwise.
+//
+// The Inbox's own rows, in its own buckets: "Stopped on you", "Holding up work",
+// "Waiting on you", "New since you looked", "Sent", "Quiet". A row's bucket *is* its
+// read state — the Inbox keeps the seen cursor and decides when a thread wants the
+// person — so the dots are its answer, not a second guess at one. Six buckets fold into
+// three; nothing here second-guesses the Inbox's order of precedence (a thread it has
+// marked read stays quiet even with a question in it: the person has seen that one).
+function stateOf(section) {
+  if (section === "stopped" || section === "holding" || section === "waiting") return "answer";
+  return section === "new" ? "unread" : "read";
 }
 
-// Threads waiting on the person, newest first. A thread is read per *message*, not
-// per record: the Inbox re-appends an agent's message with the same id when the
-// thread sees activity, so each message counts from its first appearance and the
-// thread's last message is the one whose first appearance is newest. A person's
-// reply is a message of its own, so it clears the thread.
-function threads(stdout) {
-  const byThread = new Map();
-  let project = null;
-  for (const line of String(stdout ?? "").split("\n")) {
-    if (!line) continue;
-    if (line.startsWith("P ")) { project = { key: line.slice(2), name: line.slice(2), root: null }; continue; }
-    let entry;
-    try { entry = JSON.parse(line); } catch { continue; }
-    const record = entry?.record ?? {};
-    if (entry?.kind === "project") {
-      if (project) { project.name = record.name || project.key; project.root = record.root ?? null; }
-      continue;
-    }
-    const id = record.thread_id;
-    if (!id) continue;
-    const thread = byThread.get(id) ?? new Map();
-    const first = thread.get(record.id ?? String(entry.seq));
-    if (!first || (entry.seq ?? 0) < first.seq) {
-      thread.set(record.id ?? String(entry.seq), {
-        seq: entry.seq ?? 0,
-        at: Date.parse(entry.at) || 0,
-        kind: record.author?.kind ?? null,
-        subject: subjectOf(record),
-        project: project ? { ...project } : null,
+function readThreads(stdout) {
+  const text = String(stdout ?? "").trim();
+  if (!text) return [];
+  let data;
+  try { data = JSON.parse(text); } catch { return []; }
+  if (data?.error) throw new Error(String(data.error));
+  if (!Array.isArray(data?.sections)) throw new Error("The Inbox answered in an unknown shape");
+  // A row carries its project's id and name; the folder the space is in comes from the
+  // projects list, which is the only place `root` lives.
+  const roots = new Map((data.projects ?? []).map((p) => [p.id, p.root ?? null]));
+  const list = [];
+  for (const section of data.sections) {
+    for (const row of section.threads ?? []) {
+      if (!row?.thread_id) continue;
+      const project = row.project ?? {};
+      list.push({
+        id: row.thread_id,
+        at: Date.parse(row.last_at) || Date.parse(row.created_at) || 0,
+        subject: row.subject || row.thread_name || "(no subject)",
+        state: stateOf(section.id),
+        project: {
+          key: project.id ?? project.name ?? "",
+          name: project.name ?? "",
+          root: roots.get(project.id) ?? null,
+        },
       });
     }
-    byThread.set(id, thread);
   }
-  const waiting = [];
-  for (const messages of byThread.values()) {
-    let last = null;
-    for (const message of messages.values()) if (!last || message.seq > last.seq) last = message;
-    if (last?.kind === "agent") waiting.push(last);
-  }
-  return waiting.sort((a, b) => b.at - a.at);
+  // What needs an answer first, then what is new, then what is settled; newest first
+  // inside each group, so the ages still read down the list.
+  const rank = { answer: 0, unread: 1, read: 2 };
+  return list.sort((a, b) => rank[a.state] - rank[b.state] || b.at - a.at);
 }
 
 // A folder's children, folders first: `d`/`f` and a name, NUL-separated.
@@ -219,7 +219,7 @@ export default class Plannotator extends View {
   init(_props, cx) {
     this.mode = props()?.mode ?? "panel";
     this.palette = this.mode === "palette";
-    this.waiting = [];
+    this.threads = [];
     this.folder = null;
     // The tree: each folder's children, which of them are open, the ones being read.
     this.kids = new Map();
@@ -230,16 +230,13 @@ export default class Plannotator extends View {
     this.at = 0;
     // `at` is the palette's highlighted row; `cursor` is the panel's.
     this.cursor = 0;
-    // A launch closes the window it was picked from; the close must land once.
+    // A launch closes the popup it was picked from; the close must land once.
     this.closed = false;
+    // The panel is a tab in the side panel, so it takes the keyboard when it is clicked
+    // into, not on its first render: the panel appearing must not pull the keys out of
+    // the terminal that opened it. `mod.json`'s `focusable: true` is what lets
+    // `pane.go` hand them over.
     this.handle = cx.focus_handle();
-    // A floating window draws no card of its own: Herdr frames it. It gets the
-    // keyboard when it opens, so Esc closes it. A tab copy takes the keyboard when it
-    // is clicked into, not on its first render — it lives in the side panel, and the
-    // panel appearing must not pull the keys out of the terminal that opened it.
-    this.floating = this.mode === "panel" && Boolean(props()?.overlay);
-    if (this.floating) this.handle.focus();
-    // `mod.json`'s `focusable: true` is what lets `pane.go` hand the keys to a copy.
     if (this.palette) {
       this.input = InputState.new({ placeholder: "Annotate, review, open the Inbox…" });
       this.input.on("change", (_e, cx) => { this.at = 0; cx.notify(); });
@@ -304,9 +301,9 @@ export default class Plannotator extends View {
     }
     cx.spawn(async (cx) => {
       try {
-        const r = await exec("sh", ["-c", READ, "plannotator", `${STORE()}/projects`]);
+        const r = await exec("sh", ["-c", READ, "plannotator", STORE()]);
         if (r.code !== 0) throw new Error(r.stderr || "Cannot read the Plannotator Inbox");
-        this.waiting = threads(r.stdout);
+        this.threads = readThreads(r.stdout);
         this.error = null;
       } catch (e) {
         this.error = String(e?.message ?? e).split("\n")[0].slice(0, 160);
@@ -394,6 +391,8 @@ export default class Plannotator extends View {
     openOverlay({ mod: "plannotator", kind: "popup", width: 300, props: { mode: "menu", path, dir } });
   }
 
+  // The palette and a row's menu are the overlays this mod opens, so they are the only
+  // copies with something to close: `props().overlay` is their own id.
   close() {
     const overlay = props()?.overlay;
     if (!overlay || this.closed) return false;
@@ -402,8 +401,8 @@ export default class Plannotator extends View {
     return true;
   }
 
-  // A pick hands the person to a page in their browser, so the floating window
-  // steps aside behind it. A tab of this mod has no overlay, so there it is quiet.
+  // A pick hands the person to a page in their browser, so the popup it was picked from
+  // steps aside behind it. The panel has no overlay, so there it is quiet.
   launch(fn) {
     this.close();
     fn();
@@ -417,13 +416,13 @@ export default class Plannotator extends View {
     }).catch((e) => fail(e?.message));
   }
 
-  // Every row the panel draws that can be picked, top to bottom, by id: the threads
-  // waiting on the person, then the annotate rows, then the tree. The keys walk this
+  // Every row the panel draws that can be picked, top to bottom, by id: the threads,
+  // then the annotate rows, then the tree. The keys walk this
   // order, so the row that is highlighted is always the row Return runs.
   rowIds() {
     const ids = [];
-    for (let i = 0; i < Math.min(this.waiting.length, SHOWN); i++) ids.push(`t${i}`);
-    if (this.waiting.length > SHOWN) ids.push("more");
+    for (let i = 0; i < Math.min(this.threads.length, SHOWN); i++) ids.push(`t${i}`);
+    if (this.threads.length > SHOWN) ids.push("more");
     ids.push("last", "review");
     if (this.folder) {
       ids.push("space", "tree");
@@ -507,7 +506,9 @@ export default class Plannotator extends View {
       const k = bound.find((b) => b.section === "global" && b.action === `plannotator.${id}`);
       return k?.keys ?? "";
     };
-    return v_flex().id("pl-palette").track_focus(this.handle).size_full().min_h(0).gap(8).p(10).bg(t.popover).text_size(12.8)
+    // A popup is as big as its content, and this one's rows live in a `flex_1` column:
+    // without a height of its own the popup is the search line and nothing else.
+    return v_flex().id("pl-palette").track_focus(this.handle).w(520).h(340).flex_none().min_h(0).gap(8).p(10).bg(t.popover).text_size(12.8)
       .on_key_down((e, cx) => {
         // Stops at the ends, as Herdr's own palette does: wrapping jumps out of sight.
         if (e.key === "down") this.at = Math.min(this.at + 1, Math.max(0, rows.length - 1));
@@ -538,7 +539,13 @@ export default class Plannotator extends View {
 
   renderPanel() {
     const t = theme(), at = this.folder, near = at ? at.replace(home(), "~") : null;
-    const waiting = this.waiting.slice(0, SHOWN), more = this.waiting.length - waiting.length;
+    const waiting = this.threads.slice(0, SHOWN), more = this.threads.length - waiting.length;
+    // The chip counts what needs an answer, the one thing the dots say has to be acted on.
+    const needs = this.threads.filter((th) => th.state === "answer").length;
+    // A thread's dot: yellow when it asks something, blue when the agent spoke last,
+    // grey when the person did. `ansi3`/`ansi4` rather than a named colour so the two
+    // stay yellow and blue in every theme, the way a terminal's own palette has them.
+    const dot = { answer: t.ansi3, unread: t.ansi4, read: t.dim };
     const open = Boolean(at && this.open.has(at));
     const kids = (path) => this.kids.get(path) ?? [];
     // The row the keys are on. One list for drawing and keys: the highlight can't
@@ -586,16 +593,13 @@ export default class Plannotator extends View {
       .child(div().flex_1().min_w(0).truncate().text_color(sel(id) ? t.foreground : t.muted).child(label));
     const label = (text) => h_flex().h(24).flex_none().px(14).items_center()
       .child(div().flex_1().text_size(11).text_color(t.dim).child(text));
-    // A popup sizes itself to its content, so the floating copy says its own size:
-    // a `height` in mod.json is not enough, and a flex child in an auto-height
-    // parent collapses to nothing (the header alone).
+    // The panel is a card of its own, the way Files and Changes are: rounded 10, a 1 px
+    // border, the theme's background.
     return v_flex().id("root").size_full().min_h(0).overflow_hidden()
-      .when(this.floating, (el) => el.w(380).h(620).flex_none())
-      .when(!this.floating, (el) => el.rounded(10).bg(t.background).border_1().border_color(t.border))
-      // The keys belong to every panel copy, floating or in the tab bar: one list of
-      // rows, whichever door the person came in by. A popup copy gets the keyboard
-      // when it opens; a tab copy gets it when it is clicked. Esc has something to
-      // close only in the popup, so in the tab it is left to the app.
+      .rounded(10).bg(t.background).border_1().border_color(t.border)
+      // One list of rows and one set of keys, the same in the panel and in the palette
+      // that opens over it. The panel gets the keyboard on a click; Esc has nothing to
+      // close there, so it is left to the app.
       .track_focus(this.handle).on_key_down((e, cx) => {
         // Stops at the ends, as the palette does: wrapping jumps out of sight.
         const last = Math.max(0, ids.length - 1);
@@ -611,24 +615,28 @@ export default class Plannotator extends View {
       .text_size(13).text_color(t.foreground)
       .child(h_flex().id("pl-head").h(42).flex_none().px(14).gap(8).items_center().border_b(1).border_color(t.border)
         .child(div().font_semibold().child("Plannotator"))
-        .when(this.waiting.length > 0, (el) => el.child(div().px(6).rounded(99).bg(t.accent).text_color(t.accent_foreground)
-          .text_size(10.5).child(String(this.waiting.length))))
+        .when(needs > 0, (el) => el.child(div().px(6).rounded(99).bg(t.accent).text_color(t.accent_foreground)
+          .text_size(10.5).child(String(needs))))
         .child(div().flex_1())
         .child(this.iconButton("pl-palette", "search", () => this.openPalette()))
-        .child(this.iconButton("pl-open", "file-text", () => this.launch(() => openInbox())))
-        .when(this.floating, (el) => el.child(this.iconButton("pl-close", "x", () => this.close()))))
+        .child(this.iconButton("pl-open", "file-text", () => this.launch(() => openInbox()))))
       .child(v_flex().id("pl-scroll").flex_1().min_h(0).overflow_y_scrollbar().items_center()
         .child(v_flex().id("pl-body").w_full().max_w(760).py(4).pb(10)
-          .child(label("Waiting on you"))
+          .child(label("Threads"))
           .when(waiting.length === 0, (el) => el.child(v_flex().px(14).py(6).gap(3)
-            .child(div().text_color(t.muted).child(this.ready ? "Nothing waiting" : "Reading the Inbox…"))
+            .child(div().text_color(t.muted).child(this.ready ? "No threads yet" : "Reading the Inbox…"))
             .child(div().text_size(11.5).text_color(t.dim).child("Agents leave questions and summaries in the Inbox."))
             .when(Boolean(this.error), (el) => el.child(div().text_size(11.5).text_color(t.blocked).child(this.error)))))
+          // Rows can outlive a good read: if the next one fails, say so above them
+          // rather than dropping the list the person is looking at.
+          .when(Boolean(this.error) && waiting.length > 0,
+            (el) => el.child(div().mx(14).mb(4).text_size(11.5).text_color(t.blocked).truncate().child(this.error)))
           .children(waiting.map((th, i) =>
             v_flex().id(`pl-t-${i}`).flex_none().px(12).py(6).mx(6).gap(2).rounded(7)
               .when(sel(`t${i}`), (el) => el.bg(t.selected))
               .hover((s) => s.bg(t.hover)).cursor_pointer().on_click(() => this.launch(() => openInbox()))
               .child(h_flex().gap(6).items_center()
+                .child(div().flex_none().size(7).rounded(99).bg(dot[th.state] ?? t.dim))
                 .child(div().flex_1().min_w(0).truncate().text_size(11).text_color(here(th) ? t.accent : t.dim)
                   .child(th.project?.name ?? ""))
                 .child(div().flex_none().text_size(11).text_color(t.dim).child(ago(th.at))))

@@ -2,11 +2,5 @@
   "place": "none",
   "title": "Plannotator",
   "focusable": true,
-  "tab": { "title": "Plannotator", "icon": "mods/plannotator/icon.svg" },
-  "overlay": {
-    "kind": "popup",
-    "at": "top",
-    "offset": 64,
-    "width": 380
-  }
+  "tab": { "title": "Plannotator", "icon": "mods/plannotator/icon.svg" }
 }
