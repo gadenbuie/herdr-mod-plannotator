@@ -6,6 +6,7 @@
     "title": "Plannotator",
     "icon": "mods/plannotator/icon.svg",
     "badge": "plannotator.waiting",
-    "show": "command -v plannotator >/dev/null 2>&1"
+    "show": "command -v plannotator >/dev/null 2>&1",
+    "order": 200
   }
 }
