@@ -1,0 +1,10 @@
+{
+  "global": {
+    "cmd-alt-shift-p": "plannotator.palette",
+    "cmd-alt-a": "plannotator.annotate",
+    "cmd-alt-i": "plannotator.inbox",
+    "cmd-alt-l": "plannotator.last",
+    "cmd-alt-r": "plannotator.review",
+    "cmd-alt-shift-i": "mod.open:plannotator"
+  }
+}

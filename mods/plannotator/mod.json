@@ -1,0 +1,11 @@
+{
+  "place": "none",
+  "title": "Plannotator",
+  "focusable": true,
+  "overlay": {
+    "kind": "popup",
+    "at": "top",
+    "offset": 64,
+    "width": 380
+  }
+}
