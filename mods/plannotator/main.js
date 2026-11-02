@@ -13,6 +13,15 @@
 // there when the person asks for it and gone when they don't. The same mod draws
 // its own command palette (`props().mode === "palette"`): the app's palette lists
 // Herdr's commands only, so this is the way in by keyboard.
+//
+// `mod.json` also declares a `tab`, which is a manifest the `tab-host` mod reads: it
+// draws a Plannotator button in the tab bar beside Files and Changes and adds a
+// block for this mod to the side panel's stack. That copy is the panel too (no
+// props, no overlay: nothing floats), and it is the copy that matters most — once
+// the person has opened the tab, the copy stays alive even while the panel is
+// hidden, so its watcher is on screen all the time and a decision becomes a Herdr
+// toast the moment it lands. Without `tab-host` installed the declaration is inert
+// and `place: "none"` keeps the mod out of the window.
 
 import { View, div, svg } from "gpui-kit";
 import { v_flex, h_flex, InputState, Input } from "gpui-base";
@@ -221,9 +230,12 @@ export default class Plannotator extends View {
     this.closed = false;
     this.handle = cx.focus_handle();
     // A floating window draws no card of its own: Herdr frames it. It gets the
-    // keyboard when it opens, so Esc closes it.
+    // keyboard when it opens, so Esc closes it. A tab copy takes the keyboard when it
+    // is clicked into, not on its first render — it lives in the side panel, and the
+    // panel appearing must not pull the keys out of the terminal that opened it.
     this.floating = this.mode === "panel" && Boolean(props()?.overlay);
     if (this.floating) this.handle.focus();
+    // `mod.json`'s `focusable: true` is what lets `pane.go` hand the keys to a copy.
     if (this.palette) {
       this.input = InputState.new({ placeholder: "Annotate, review, open the Inbox…" });
       this.input.on("change", (_e, cx) => { this.at = 0; cx.notify(); });
@@ -259,7 +271,7 @@ export default class Plannotator extends View {
     cx.spawn(async (cx) => {
       for (;;) {
         const command = await nextCommand();
-        if (command === "focus") { if (this.floating) this.handle.focus(); continue; }
+        if (command === "focus") { if (this.mode === "panel") this.handle.focus(); continue; }
         const now = Date.now();
         if (now - claimed < 500) continue;
         claimed = now;
@@ -380,9 +392,10 @@ export default class Plannotator extends View {
 
   close() {
     const overlay = props()?.overlay;
-    if (!overlay || this.closed) return;
+    if (!overlay || this.closed) return false;
     this.closed = true;
     closeOverlay(overlay);
+    return true;
   }
 
   // A pick hands the person to a page in their browser, so the floating window
@@ -575,18 +588,22 @@ export default class Plannotator extends View {
     return v_flex().id("root").size_full().min_h(0).overflow_hidden()
       .when(this.floating, (el) => el.w(380).h(620).flex_none())
       .when(!this.floating, (el) => el.rounded(10).bg(t.background).border_1().border_color(t.border))
-      .when(this.floating, (el) => el.track_focus(this.handle).on_key_down((e, cx) => {
+      // The keys belong to every panel copy, floating or in the tab bar: one list of
+      // rows, whichever door the person came in by. A popup copy gets the keyboard
+      // when it opens; a tab copy gets it when it is clicked. Esc has something to
+      // close only in the popup, so in the tab it is left to the app.
+      .track_focus(this.handle).on_key_down((e, cx) => {
         // Stops at the ends, as the palette does: wrapping jumps out of sight.
         const last = Math.max(0, ids.length - 1);
         if (this.cursor > last) this.cursor = last;
         if (e.key === "down") this.cursor = Math.min(this.cursor + 1, last);
         else if (e.key === "up") this.cursor = Math.max(this.cursor - 1, 0);
         else if (e.key === "enter") this.runRow(ids[this.cursor], cx);
-        else if (e.key === "escape") this.close();
+        else if (e.key === "escape") { if (!this.close()) return; }
         else return;
         cx.stop_propagation();
         cx.notify();
-      }))
+      })
       .text_size(13).text_color(t.foreground)
       .child(h_flex().id("pl-head").h(42).flex_none().px(14).gap(8).items_center().border_b(1).border_color(t.border)
         .child(div().font_semibold().child("Plannotator"))
