@@ -1,6 +1,6 @@
 {
   "global": {
-    "cmd-alt-shift-i": "layout.toggle:panel",
+    "cmd-alt-shift-i": "tab-host.open:plannotator",
     "cmd-alt-shift-p": "plannotator.palette",
     "cmd-alt-a": "plannotator.annotate",
     "cmd-alt-i": "plannotator.inbox",
