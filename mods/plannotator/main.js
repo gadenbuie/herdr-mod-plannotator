@@ -341,6 +341,8 @@ export default class Plannotator extends View {
     // A save that is still out, and the last refusal under a card. The reply's Send waits
     // for the first, so a note typed a moment before Send goes with it.
     this.pending = null;
+    // One save at a time per question, chained by question id: see `savePick`.
+    this.saving = new Map();
     this.cardError = null;
     // `at` is the palette's highlighted row; `cursor` is the panel's.
     this.cursor = 0;
@@ -990,6 +992,7 @@ export default class Plannotator extends View {
     }
     this.fields.clear();
     this.picked.clear();
+    this.saving?.clear();
     this.cardError = null;
     this.pending = null;
   }
@@ -1017,7 +1020,9 @@ export default class Plannotator extends View {
   pickedFor(m, q) {
     const id = `${m?.id}/${q?.key}`, rev = Number(q?.revision) || 0;
     let p = this.picked.get(id);
-    if (!p || p.revision !== rev) {
+    // Re-seeded when the record moves on, but never under the person's hands: text they have
+    // typed and not yet saved is theirs, not stale.
+    if (!p || (p.revision !== rev && !p.dirty)) {
       const a = q?.answer ?? {};
       p = {
         revision: rev,
@@ -1025,6 +1030,7 @@ export default class Plannotator extends View {
         other: String(a.other ?? ""),
         note: String(a.note ?? ""),
         text: String(a.text ?? ""),
+        dirty: false,
       };
       this.picked.set(id, p);
     }
@@ -1045,11 +1051,13 @@ export default class Plannotator extends View {
     let state = this.fields.get(id);
     if (state) return state;
     const p = this.pickedFor(m, q);
-    if (slot === "text") {
-      state = TextareaState.new({ placeholder: "Write your answer…", rows: 2, value: p.text });
+    if (slot === "text" || slot === "note") {
+      // A note is a sentence or three, so it gets a box that grows; their own option is one
+      // line, because it stands where a choice would.
+      state = TextareaState.new({ placeholder: slot === "note" ? "…" : "Write your answer…", rows: 2, value: p[slot] });
       state.set_auto_grow(2, 6);
     } else {
-      state = InputState.new({ placeholder: slot === "other" ? "Your own answer…" : "Note (optional)", value: p[slot] });
+      state = InputState.new({ placeholder: "Your own answer…", value: p[slot] });
     }
     // Enter finishes the thought and saves it; so does leaving the field, which is what
     // happens when the person clicks Send next.
@@ -1064,10 +1072,20 @@ export default class Plannotator extends View {
   fieldRow(m, q, slot, label) {
     const t = theme(), state = this.fields.get(this.fieldId(m, q, slot));
     if (state) {
+      // Their own option stands among the choices, so it keeps a ring; a note does not — it is
+      // not an answer, it is what they want to say about the answer — so it is a heading and a
+      // box, and a written answer is only the box.
+      if (slot === "note") {
+        return v_flex().w_full().flex_none().gap(3)
+          .child(div().text_size(10.5).text_color(t.dim).child("Note"))
+          .child(div().w_full().child(Textarea.new(state)));
+      }
+      if (slot === "text") {
+        return v_flex().w_full().flex_none().child(div().w_full().child(Textarea.new(state)));
+      }
       return h_flex().w_full().flex_none().gap(7).items_center()
         .child(div().flex_none().size(11).rounded(99).border_1().border_color(t.input))
-        .child(div().flex_1().min_w(0)
-          .child(slot === "text" ? Textarea.new(state) : Input.new(state)));
+        .child(div().flex_1().min_w(0).child(Input.new(state)));
     }
     return h_flex().id(`pl-qf-${this.fieldId(m, q, slot)}`).h(20).flex_none().gap(5).items_center()
       .rounded(4).cursor_pointer().hover((s) => s.bg(t.hover))
@@ -1084,36 +1102,48 @@ export default class Plannotator extends View {
   // shape — `selected`, and `other`, `text` and `note` beside it, which is where a person's
   // own option and their note on it go.
   savePick(m, q, cx) {
-    const p = this.pickedFor(m, q);
-    const answer = {
-      v: 1, key: q.key, kind: q.kind, prompt: q.prompt,
-      selected: q.kind === "single" ? p.selected.slice(0, 1) : p.selected,
-      ...(p.other.trim() ? { other: p.other } : {}),
-      ...(p.text.trim() ? { text: p.text } : {}),
-      ...(p.note.trim() ? { note: p.note } : {}),
-    };
-    // Nothing chosen, nothing typed: `null` is how a pick is cleared, and how a card that
-    // was clicked twice goes back to unanswered.
-    const empty = answer.selected.length === 0 && !answer.other && !answer.text && !answer.note;
     const id = `${m?.id}/${q?.key}`;
-    this.cardError = null;
-    const work = asked("POST", `messages/${m.id}/picks`, {
-      questions: [{ key: q.key, revision: q.revision, answer: empty ? null : answer }],
+    // One save per question at a time, and the revision read when the request goes out
+    // rather than when the save was asked for. A click and a note on the same card land
+    // milliseconds apart, and the second would otherwise name the revision the first had
+    // already spent — which the Inbox refuses as `question_revision_conflict`, in red, under
+    // a card that was in fact saving correctly.
+    const before = this.saving.get(id) ?? Promise.resolve();
+    const work = before.catch(() => {}).then(() => {
+      const p = this.pickedFor(m, q);
+      const current = this.recordOf(m, q) ?? q;
+      const answer = {
+        v: 1, key: current.key, kind: current.kind, prompt: current.prompt,
+        selected: current.kind === "single" ? p.selected.slice(0, 1) : p.selected,
+        ...(p.other.trim() ? { other: p.other } : {}),
+        ...(p.text.trim() ? { text: p.text } : {}),
+        ...(p.note.trim() ? { note: p.note } : {}),
+      };
+      // Nothing chosen, nothing typed: `null` is how a pick is cleared, and how a card that
+      // was clicked twice goes back to unanswered.
+      const empty = answer.selected.length === 0 && !answer.other && !answer.text && !answer.note;
+      return asked("POST", `messages/${m.id}/picks`, {
+        questions: [{ key: current.key, revision: current.revision, answer: empty ? null : answer }],
+      }).then((data) => {
+        // The questions as the Inbox now holds them — new revision, answer written down — are
+        // the panel's copy, so a draft made here and one made in the browser are one draft.
+        const msg = this.opened?.thread?.messages?.find((x) => x?.id === m?.id);
+        if (msg && Array.isArray(data?.questions)) {
+          msg.questions = data.questions.filter((x) => x?.key);
+          const p2 = this.picked.get(id);
+          if (p2) p2.dirty = false;
+        }
+        return data;
+      });
     });
+    this.saving.set(id, work);
     // A Send waits on this: the reply names picks, and a pick still in flight is one the
     // Inbox would refuse as unsent.
     this.pending = work.catch(() => {});
+    this.cardError = null;
     cx?.spawn(async (cx) => {
       try {
-        const data = await work;
-        const msg = this.opened?.thread?.messages?.find((x) => x?.id === m?.id);
-        // The Inbox answers with the message's questions as it now holds them — the new
-        // revision, and the answer written down. The rings read from those, so a draft made
-        // here and a draft made in the browser are one draft.
-        if (msg && Array.isArray(data?.questions)) {
-          msg.questions = data.questions.filter((x) => x?.key);
-          for (const fresh of msg.questions) this.picked.delete(`${msg.id}/${fresh.key}`);
-        }
+        await work;
         cx.notify();
       } catch (e) {
         // The person may have left the thread while this was out; a refusal then belongs to
@@ -1128,11 +1158,19 @@ export default class Plannotator extends View {
     });
   }
 
+  // A question's record as the panel holds it now: a save applies the Inbox's answer, so the
+  // object a click captured may be a revision behind by the time the request goes out.
+  recordOf(m, q) {
+    const msg = this.opened?.thread?.messages?.find((x) => x?.id === m?.id);
+    return (msg?.questions ?? []).find((x) => x?.key === q?.key) ?? null;
+  }
+
   // A ring: one choice for a single-choice question, and clicking the chosen one again
   // clears it, which is the only way back to "not answered" from here.
   toggleChoice(m, q, label, cx) {
     if (!label) return;
     const p = this.pickedFor(m, q);
+    p.dirty = true;
     p.selected = p.selected.includes(label) ? [] : [label];
     // Their own option and one of the question's are alternatives, not both: "Other" is an
     // answer in its own right, which is how the page reads it back ("Other: …"). The field
@@ -1151,6 +1189,7 @@ export default class Plannotator extends View {
     if (!state) return;
     const p = this.pickedFor(m, q), value = String(state.value() ?? "");
     if (p[slot] === value) return;
+    p.dirty = true;
     p[slot] = value;
     if (slot === "other" && value.trim()) p.selected = [];
     if (slot === "text") p.selected = [];
@@ -1268,7 +1307,9 @@ export default class Plannotator extends View {
           .child("Something to do outside this thread")))
         .when(!(q?.choices ?? []).length && q?.kind !== "action" && !editable && !q?.answer?.text,
           (el) => el.child(div().text_size(11).text_color(t.dim).child("No answer")))
-        .when(Boolean(note), (el) => el.child(div().text_size(11).text_color(t.dim).child(`Note: ${note}`)))
+        .when(Boolean(note), (el) => el.child(v_flex().w_full().flex_none().gap(2)
+          .child(div().text_size(10.5).text_color(t.dim).child("Note"))
+          .child(div().text_size(12).text_color(t.muted).child(note))))
         .when(Boolean(q?.recommendation), (el) => el.child(div().text_size(11).text_color(t.dim)
           .child(`Recommended: ${q.recommendation}`)))
         .when(Boolean(holds), (el) => el.child(div().text_size(11).text_color(t.dim).child(`Holds up: ${holds}`)))
