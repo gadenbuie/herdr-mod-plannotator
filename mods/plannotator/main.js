@@ -1259,6 +1259,15 @@ export default class Plannotator extends View {
       .when(on, (el) => el.bg(t.accent));
     const label = (text, past) => div().flex_1().min_w(0).text_size(12)
       .text_color(past ? t.dim : t.foreground).child(text);
+    // The recommendation, on the choice it names. The Inbox puts it in a line of its own under
+    // the choices, where it makes the person look back up to find which one was meant; matched
+    // against the labels it can sit beside the label instead, and the line is only kept for a
+    // recommendation that names no choice — a sentence rather than an option.
+    const rec = String(q?.recommendation ?? "").trim();
+    const isRecommended = (c) => Boolean(rec) && String(c?.label ?? "").trim().toLowerCase() === rec.toLowerCase();
+    const recIsChoice = (q?.choices ?? []).some(isRecommended);
+    const recommendedTag = (past) => div().flex_none().px(5).py(1).rounded(99).bg(t.selected)
+      .child(div().text_size(9.5).text_color(past ? t.dim : t.accent).child("Recommended"));
     // A choice of the question's own. Clicking one is a pick; on a card that is frozen it is
     // a picture of what was picked, and clicking does nothing.
     const choice = (c, n) => {
@@ -1269,7 +1278,9 @@ export default class Plannotator extends View {
           .on_click((_e, cx) => this.toggleChoice(m, q, c?.label, cx)))
         .child(ring(on, past))
         .child(v_flex().flex_1().min_w(0).gap(1)
-          .child(label(String(c?.label ?? ""), past))
+          .child(h_flex().w_full().flex_none().gap(6).items_center()
+            .child(label(String(c?.label ?? ""), past))
+            .when(isRecommended(c), (el) => el.child(recommendedTag(past))))
           .when(Boolean(c?.description), (el) => el.child(div().text_size(11).text_color(t.dim)
             .child(String(c.description)))));
     };
@@ -1314,8 +1325,9 @@ export default class Plannotator extends View {
         .when(Boolean(note), (el) => el.child(v_flex().w_full().flex_none().gap(2)
           .child(div().text_size(10.5).text_color(t.dim).child("Note"))
           .child(div().text_size(12).text_color(t.muted).child(note))))
-        .when(Boolean(q?.recommendation), (el) => el.child(div().text_size(11).text_color(t.dim)
-          .child(`Recommended: ${q.recommendation}`)))
+        // Only when it names no choice on the card: otherwise the tag above has said it.
+        .when(Boolean(rec) && !recIsChoice, (el) => el.child(div().text_size(11).text_color(t.dim)
+          .child(`Recommended: ${rec}`)))
         .when(Boolean(holds), (el) => el.child(div().text_size(11).text_color(t.dim).child(`Holds up: ${holds}`)))
         // A refusal is the Inbox's own sentence, under the card it belongs to.
         .when(this.cardError?.id === `${m?.id}/${q?.key}`, (el) => el.child(div().text_size(11)
