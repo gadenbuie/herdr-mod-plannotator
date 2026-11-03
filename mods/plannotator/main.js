@@ -1001,14 +1001,18 @@ export default class Plannotator extends View {
         .child(respond("respond", "file-text", "Open in Inbox for picks and pictures")));
   }
 
-  // One message: the author and its age, then its words. The person's own messages sit
-  // on `surface`, so a long thread still reads as a conversation rather than a wall.
+  // One message: the author and its age, then its words. The person's own are boxed so a
+  // long thread reads as a conversation rather than a wall: `popover`, the token one step
+  // up from the page, and a 2 px `accent` rule down the left — the same colour as the
+  // "You" that labels them. Not `surface`: in this app's palette it resolves to the same
+  // colour as `background`, which is why a first pass drew them on nothing at all. The
+  // rule takes its 2 px out of the left padding, so the words stay in one column.
   renderMessage(m) {
     const t = theme(), mine = m?.author?.kind === "person";
     const { text, pictures } = wordsOf(m?.body);
     const at = Date.parse(m?.created_at);
     return v_flex().id(`pl-msg-${m?.id}`).w_full().px(12).py(7).mx(6).rounded(8).gap(3)
-      .when(mine, (el) => el.bg(t.surface))
+      .when(mine, (el) => el.bg(t.popover).pl(10).border_l(2).border_color(t.accent))
       .child(h_flex().gap(6).items_center()
         .child(div().text_size(11).font_semibold().text_color(mine ? t.accent : t.muted)
           .child(mine ? "You" : String(m?.author?.name || m?.author?.host || "Agent")))
