@@ -993,9 +993,12 @@ export default class Plannotator extends View {
         .children(messages.map((m) => this.renderMessage(m)))
         .when(Boolean(th) && messages.length === 0,
           (el) => el.child(div().px(14).py(6).text_color(t.muted).child("This thread has no messages."))))
-      .child(v_flex().id("pl-thread-foot").flex_none().w_full().pt(2).pb(6).border_t(1).border_color(t.border)
+      // No bottom padding: the page row is the page's last pixel, sitting on the panel's
+      // own edge the way the tab bar's rows do. The card's rounding clips it, and the
+      // field's own 6 px is what separates the row from the box above it.
+      .child(v_flex().id("pl-thread-foot").flex_none().w_full().pt(2).border_t(1).border_color(t.border)
         .when(full, (el) => el.child(field()))
-        .child(respond("respond", "file-text", "Picks and pictures in the Inbox")));
+        .child(respond("respond", "file-text", "Open in Inbox for picks and pictures")));
   }
 
   // One message: the author and its age, then its words. The person's own messages sit
