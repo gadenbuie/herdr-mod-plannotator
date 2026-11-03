@@ -282,6 +282,14 @@ function wordsOf(body) {
   return { text, pictures };
 }
 
+// A message's question blocks, taken out of its words: each one is drawn as a card from
+// the `questions` the Inbox parsed beside the body, so the same words twice would be one
+// too many. Only `:::question` comes off — an `:::action` block has no card here, and its
+// words are still the only place the person can read it.
+function wordsWithoutQuestions(body) {
+  return String(body ?? "").replace(/^:::question\n[\s\S]*?^:::$/gm, "").replace(/\n{3,}/g, "\n\n").trim();
+}
+
 // A subsequence score, the way a palette reads; null when q isn't there at all.
 function fuzzy(q, text) {
   const t = text.toLowerCase();
@@ -948,6 +956,67 @@ export default class Plannotator extends View {
           .child(action("pick", "folder-plus", "Another folder…", () => this.pick())))))
   }
 
+  // One question, as a card: its title in the header, what it is about under it, the
+  // choices it offers, and — where the person has not answered — the way to. The title is
+  // the question's own `prompt`, which the Inbox keeps apart from `context` for exactly
+  // this; the state beside it is the card's own word for what the row's dot says in the
+  // list. Nothing here is clickable but the way to the Inbox: a pick is the page's to
+  // make, and a panel that looked like it took one would be lying.
+  renderQuestion(m, q) {
+    const t = theme();
+    const answered = Boolean(q?.answer);
+    const closed = answered || Boolean(q?.set_aside_at) || Boolean(q?.superseded_by);
+    const state = q?.set_aside_at ? "Set aside" : q?.superseded_by ? "Replaced" : answered ? "Answered" : "Waiting on you";
+    const tone = answered ? t.done : closed ? t.dim : t.working;
+    const chosen = new Set(q?.answer?.selected ?? []);
+    // `context` carries the "Context:" label and a "Holds up:" line the Inbox appends from
+    // its own field; the label goes (the card is the context) and the line is drawn under
+    // the choices with its words, so neither reads as part of the sentence.
+    const about = String(q?.context ?? "")
+      .replace(/^Context:\s*/, "")
+      .replace(/\n*Holds up:[^\n]*/g, "")
+      .trim();
+    const holds = (q?.holds_up ?? []).filter(Boolean).join(" · ");
+    const choice = (c, n) => {
+      const on = chosen.has(c?.label);
+      const past = closed && !on;
+      return h_flex().id(`pl-qc-${m?.id}-${q?.key}-${n}`).w_full().flex_none().gap(7).items_start()
+        .child(div().flex_none().mt(3).size(11).rounded(99).border_1()
+          .border_color(on ? t.accent : past ? t.dim : t.input)
+          .when(on, (el) => el.bg(t.accent)))
+        .child(v_flex().flex_1().min_w(0).gap(1)
+          .child(div().text_size(12).text_color(past ? t.dim : t.foreground)
+            .child(String(c?.label ?? "")))
+          .when(Boolean(c?.description), (el) => el.child(div().text_size(11).text_color(t.dim)
+            .child(String(c.description)))));
+    };
+    return v_flex().id(`pl-q-${m?.id}-${q?.key}`).w_full().flex_none().mt(2).overflow_hidden()
+      .rounded(8).border_1().border_color(t.border).bg(t.popover)
+      .child(h_flex().flex_none().px(10).py(6).gap(7).items_center().border_b(1).border_color(t.border)
+        .child(div().flex_none().size(7).rounded(99).bg(tone))
+        .child(div().flex_1().min_w(0).text_size(12).font_semibold().child(String(q?.prompt ?? "A question")))
+        .child(div().flex_none().text_size(10.5).text_color(tone).child(state)))
+      .child(v_flex().flex_none().px(10).py(8).gap(7)
+        .when(Boolean(about), (el) => el.child(div().w_full().text_size(12).line_height(1.5).text_color(t.muted)
+          .child(TextView.markdown(`pl-qb-${m?.id}-${q?.key}`, about))))
+        .children((q?.choices ?? []).map(choice))
+        // A text question has no choices: its card says what kind of answer it wants, and
+        // the answer itself, if the person gave one, as they wrote it.
+        .when(!(q?.choices ?? []).length, (el) => el
+          .child(div().text_size(11).text_color(t.dim)
+            .child(q?.kind === "text" ? "A written answer" : q?.kind === "action" ? "Something to do outside this thread" : "No choices"))
+          .when(Boolean(answered && q?.answer?.text), (el) => el.child(div().w_full().text_size(12).line_height(1.5)
+            .child(TextView.markdown(`pl-qa-${m?.id}-${q?.key}`, String(q.answer.text))))))
+        .when(Boolean(q?.recommendation), (el) => el.child(div().text_size(11).text_color(t.dim)
+          .child(`Recommended: ${q.recommendation}`)))
+        .when(Boolean(holds), (el) => el.child(div().text_size(11).text_color(t.dim).child(`Holds up: ${holds}`)))
+        .when(!closed, (el) => el.child(h_flex().id(`pl-qa-${m?.id}-${q?.key}`).h(20).flex_none().gap(5)
+          .items_center().rounded(4).cursor_pointer().hover((s) => s.bg(t.hover))
+          .on_click(() => this.respond())
+          .child(svg(`${ICONS}/square-pen.svg`).size(11).flex_none().text_color(t.accent))
+          .child(div().text_size(11).text_color(t.accent).child("Answer in the Inbox")))));
+  }
+
   // ---- a thread, drawn ----
 
   // One thread, in the panel's own width: who wrote each message, when, and the words
@@ -1011,7 +1080,8 @@ export default class Plannotator extends View {
   // rule takes its 2 px out of the left padding, so the words stay in one column.
   renderMessage(m) {
     const t = theme(), mine = m?.author?.kind === "person";
-    const { text, pictures } = wordsOf(m?.body);
+    const asked = Array.isArray(m?.questions) ? m.questions : [];
+    const { text, pictures } = wordsOf(asked.length ? wordsWithoutQuestions(m?.body) : m?.body);
     const at = Date.parse(m?.created_at);
     return v_flex().id(`pl-msg-${m?.id}`).w_full().px(12).py(7).mx(6).rounded(8).gap(3)
       // The accent edge is square: a rounded corner either side of it would bend the rule
@@ -1029,7 +1099,11 @@ export default class Plannotator extends View {
       // of the size, not pixels: `line_height(21)` is twenty-one times the text, which is
       // a page of blank lines, not a looser one.
       .child(div().w_full().text_size(14).line_height(1.6)
-        .child(TextView.markdown(`pl-md-${m?.id}`, text || "_(no words)_")))
+        // A message that is only a question is the question's card, not "no words" above it.
+      .when(Boolean(text) || asked.length === 0, (el) => el
+        .child(div().w_full().text_size(14).line_height(1.6)
+          .child(TextView.markdown(`pl-md-${m?.id}`, text || "_(no words)_"))))
+      .children(asked.map((q) => this.renderQuestion(m, q))))
       // A message with pictures in it says so, and says it as a link: it goes where the
       // pictures are — the page on this thread — in `accent` with the same `file-text` the
       // row at the bottom of the page wears, so "this opens the Inbox" reads the same in
