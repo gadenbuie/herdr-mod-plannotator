@@ -268,13 +268,15 @@ function lastAgentOf(messages) {
 // `:::action` are the Inbox's own block fences: the picks under them need the page,
 // but the words are the agent's, and the `- [ ]` choices and `Recommended:` line read
 // as what was asked. A picture is a path in the person's own files
-// (`![alt](/abs/a.png)`), which a mod cannot draw: it becomes its alt text, and the
-// count under the message says where the pictures are.
+// (`![alt](/abs/a.png)`), which a mod cannot draw: it comes off the words and is
+// counted, and the link under the message says where the pictures are. Its alt text
+// goes with it — the Inbox names those files (`pasted-image-2026-11-03-1452`), so a
+// sentence with two pictures in it would carry two filenames through the middle of it.
 function wordsOf(body) {
   const pictures = (String(body ?? "").match(/!\[[^\]]*\]\([^)]*\)/g) ?? []).length;
   const text = String(body ?? "")
     .replace(/^:::[a-z-]*[^\n]*$/gm, "")
-    .replace(/!\[([^\]]*)\]\([^)]*\)/g, (_all, alt) => (alt ? `*${alt}*` : ""))
+    .replace(/!\[[^\]]*\]\([^)]*\)/g, "")
     .replace(/\n{3,}/g, "\n\n")
     .trim();
   return { text, pictures };
@@ -1028,8 +1030,18 @@ export default class Plannotator extends View {
       // a page of blank lines, not a looser one.
       .child(div().w_full().text_size(14).line_height(1.6)
         .child(TextView.markdown(`pl-md-${m?.id}`, text || "_(no words)_")))
-      .when(pictures > 0, (el) => el.child(div().text_size(11).text_color(t.dim)
-        .child(pictures === 1 ? "1 picture — open it in the Inbox" : `${pictures} pictures — open them in the Inbox`)));
+      // A message with pictures in it says so, and says it as a link: it goes where the
+      // pictures are — the page on this thread — in `accent` with the same `file-text` the
+      // row at the bottom of the page wears, so "this opens the Inbox" reads the same in
+      // both places. A mod cannot draw an image off the person's disk, so the count is
+      // what it can offer besides the way there.
+      .when(pictures > 0, (el) => el.child(h_flex().id(`pl-pics-${m?.id}`).h(18).flex_none()
+        .gap(5).items_center().rounded(4).cursor_pointer()
+        .hover((s) => s.bg(t.hover))
+        .on_click(() => this.respond())
+        .child(svg(`${ICONS}/file-text.svg`).size(11).flex_none().text_color(t.accent))
+        .child(div().text_size(11).text_color(t.accent)
+          .child(pictures === 1 ? "1 picture — open it in the Inbox" : `${pictures} pictures — open them in the Inbox`))));
   }
 
   // ---- a file's menu ----
