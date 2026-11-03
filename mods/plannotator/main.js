@@ -888,8 +888,12 @@ export default class Plannotator extends View {
         .child(this.iconButton("pl-palette", "search", () => this.openPalette()))
         // One page, so one button: the Inbox on the thread that is open, or on its list.
         .child(this.iconButton("pl-open", "file-text", () => this.launch(() => (this.opened ? this.respond() : openInbox())))))
-      .child(v_flex().id("pl-scroll").flex_1().min_h(0).overflow_y_scrollbar().items_center()
-        .when(Boolean(this.opened), (el) => el.child(this.renderThread(sel)))
+      // The list scrolls as one box. A thread page is not that box: it pins what the
+      // thread is at the top and the way to answer it at the bottom, and scrolls only
+      // the conversation between them, so the scrollbar there belongs to the middle.
+      .child(v_flex().id("pl-scroll").flex_1().min_h(0).items_center()
+        .when(!this.opened, (el) => el.overflow_y_scrollbar())
+        .when(Boolean(this.opened), (el) => el.overflow_hidden().child(this.renderThread(sel)))
         .when(!this.opened, (el) => el.child(v_flex().id("pl-body").w_full().max_w(760).py(4).pb(10)
           .child(label("Threads"))
           .when(waiting.length === 0, (el) => el.child(v_flex().px(14).py(6).gap(3)
@@ -973,17 +977,25 @@ export default class Plannotator extends View {
           .on_click((_e, cx) => this.send(cx))
           .child(div().text_size(12).child(this.reply?.busy ? "Sending…" : "Send"))))
       .when(Boolean(this.reply?.error), (el) => el.child(div().text_size(11.5).text_color(t.blocked).child(this.reply.error)));
-    return v_flex().id("pl-thread").w_full().max_w(760).py(4).pb(10)
-      .child(h_flex().h(24).flex_none().px(14).gap(6).items_center()
+    // Three rows: what the thread is, the conversation, the way to answer it. Only the
+    // conversation scrolls — a project that scrolled away would leave the person reading
+    // messages with no idea whose thread they are, and a field that scrolled away would
+    // have to be found before every reply.
+    return v_flex().id("pl-thread").flex_1().min_h(0).w_full().max_w(760)
+      .child(h_flex().id("pl-thread-head").h(26).flex_none().px(14).gap(6).items_center().border_b(1)
+        .border_color(t.border)
         .child(div().flex_1().min_w(0).truncate().text_size(11).text_color(t.dim)
           .child([th?.project?.name, Number.isFinite(at) ? ago(at) : null].filter(Boolean).join(" · "))))
-      .when(!th && !o?.error, (el) => el.child(v_flex().px(14).py(6)
-        .child(div().text_color(t.muted).child("Reading the thread…"))))
-      .when(Boolean(o?.error), (el) => el.child(div().mx(14).mb(4).text_size(11.5).text_color(t.blocked).child(o.error)))
-      .children(messages.map((m) => this.renderMessage(m)))
-      .when(Boolean(th) && messages.length === 0, (el) => el.child(div().px(14).py(6).text_color(t.muted).child("This thread has no messages.")))
-      .when(full, (el) => el.child(field()))
-      .child(respond("respond", "file-text", "Picks and pictures in the Inbox"));
+      .child(v_flex().id("pl-thread-scroll").flex_1().min_h(0).w_full().overflow_y_scrollbar().py(4)
+        .when(!th && !o?.error, (el) => el.child(v_flex().px(14).py(6)
+          .child(div().text_color(t.muted).child("Reading the thread…"))))
+        .when(Boolean(o?.error), (el) => el.child(div().mx(14).mb(4).text_size(11.5).text_color(t.blocked).child(o.error)))
+        .children(messages.map((m) => this.renderMessage(m)))
+        .when(Boolean(th) && messages.length === 0,
+          (el) => el.child(div().px(14).py(6).text_color(t.muted).child("This thread has no messages."))))
+      .child(v_flex().id("pl-thread-foot").flex_none().w_full().pt(2).pb(6).border_t(1).border_color(t.border)
+        .when(full, (el) => el.child(field()))
+        .child(respond("respond", "file-text", "Picks and pictures in the Inbox")));
   }
 
   // One message: the author and its age, then its words. The person's own messages sit
