@@ -1366,14 +1366,19 @@ export default class Plannotator extends View {
     const picks = this.unsentPicks(th);
     const can = Boolean(words) || picks.length > 0;
     const full = Boolean(th && this.draft) && lastAgentOf(messages) !== null;
-    const field = () => v_flex().id("pl-reply").flex_none().px(12).py(6).gap(6)
-      .child(h_flex().items_end().gap(8).px(10).py(7).rounded(9).border_1()
-        .border_color(this.writing ? t.accent : t.input).bg(t.background)
+    // The field *is* the band, not a box inside one. It used to be a bordered, rounded box
+    // inset 12 px inside the footer, which put a frame around a frame at the bottom of every
+    // thread; now it runs the panel's full width, sits on `popover` — the token one step up
+    // from the page, the same one the person's own messages are boxed in — and the rule above
+    // it turns `accent` while they are in it, which is what the inner border used to say.
+    const field = () => v_flex().id("pl-reply").flex_none().w_full().px(10).py(8).gap(6)
+      .bg(t.popover).border_t(1).border_color(this.writing ? t.accent : t.border)
+      .child(h_flex().items_end().gap(8).w_full()
         .child(div().flex_1().min_w(0).child(Textarea.new(this.draft)))
         .child(h_flex().id("pl-send").h(26).flex_none().px(10).items_center().rounded(6)
           .when(can && !this.reply?.busy, (el) => el.cursor_pointer().bg(t.solid).text_color(t.solid_foreground)
             .hover((s) => s.bg(t.accent).text_color(t.accent_foreground)))
-          .when(!can || Boolean(this.reply?.busy), (el) => el.bg(t.surface).text_color(t.dim))
+          .when(!can || Boolean(this.reply?.busy), (el) => el.bg(t.raised).text_color(t.dim))
           .on_click((_e, cx) => this.send(cx))
           .child(div().text_size(12).child(this.reply?.busy ? "Sending…" : "Send"))))
       // What the Send is carrying besides words, so a pick made two cards up is not
