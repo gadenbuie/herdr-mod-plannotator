@@ -35,9 +35,9 @@ const ICONS = "mods/workspace-chrome";
 // changes; the list itself is asked of the Inbox server (see `READ`).
 const STORE = () => `${home()}/.plannotator/inbox`;
 // The number a tab-host button can wear while the panel is collapsed:
-// `tab.badge` in `mod.json` names this key, and tab-host draws whatever is in it.
-// Nothing reads it today (tab-host has no badge yet — see its `HANDOFF.md`), and
-// writing it costs one comparison per read.
+// `tab.badge` in `mod.json` names this key, and tab-host draws whatever is in it
+// as a chip after the label. It is written only when the number changes, because
+// `setShared` re-renders every mod.
 const BADGE = "plannotator.waiting";
 // The panel's view, kept where tab-host can carry it from space to space:
 // `tab.state` in `mod.json` names this key, and tab-host keeps one value of it per
@@ -497,11 +497,12 @@ export default class Plannotator extends View {
   }
 
   // Send the field to the agent that spoke last in this thread, which is the message
-  // the Inbox page answers: one POST of the words, and no answers with them — a pick is
-  // the page's, where the choices and the pictures are. `seen_through_seq` is the newest
-  // message drawn here, so the Inbox can refuse the reply when the agent wrote after the
-  // person read, which is what `thread_moved_on` means; the field keeps the words, and
-  // the thread is read again to show what moved it.
+  // the Inbox page answers: one POST of the words, with every answer the cards have
+  // picked and not sent named alongside them — a picture and a pick the page holds
+  // stay there, which is what the row under the field is for. `seen_through_seq` is
+  // the newest message drawn here, so the Inbox can refuse the reply when the agent
+  // wrote after the person read, which is what `thread_moved_on` means; the field keeps
+  // the words, and the thread is read again to show what moved it.
   send(cx) {
     const o = this.opened, words = String(this.draft?.value() ?? "").trim();
     // Words are not the only thing a Send can carry: the answers picked in the cards go with
