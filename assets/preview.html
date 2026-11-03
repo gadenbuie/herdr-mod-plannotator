@@ -41,7 +41,7 @@
 
   /* ---- title bar ---- */
   .titlebar {
-    height: 40px; flex: none; display: flex; align-items: center; gap: 8px;
+    height: 41px; flex: none; display: flex; align-items: center; gap: 8px;
     padding: 0 14px; border-bottom: 1px solid var(--hairline);
   }
   .lights { display: flex; gap: 8px; margin: 0 10px 0 4px; }
@@ -73,13 +73,13 @@
   .spaces .head { font-size: 11px; color: #5a5b5e; padding: 0 16px 12px; }
   .srow { display: flex; align-items: center; gap: 12px; height: 30px; padding: 0 16px; font-size: 13px; }
   .srow .dot { width: 7px; height: 7px; border-radius: 50%; flex: none; }
-  .srow .name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #b9b9bb; }
+  .srow .name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #c9cacc; }
   .srow .plus { color: #6f7073; font-size: 14px; }
   .srow .tail { font-size: 10.5px; color: #4d4e51; background: #1a1c1f; border-radius: 99px; padding: 2px 6px; }
   .sect { margin-top: 22px; }
   .agents-head { display: flex; align-items: center; gap: 8px; font-size: 11px; color: #5a5b5e; padding: 0 16px 10px; }
   .arow { display: flex; align-items: center; gap: 12px; height: 30px; padding: 0 16px; font-size: 13px; }
-  .arow .name { flex: 1; color: #b9b9bb; }
+  .arow .name { flex: 1; color: #c9cacc; }
   .arow .ago { font-size: 11px; color: #4d4e51; }
   .arow .dot { width: 7px; height: 7px; border-radius: 50%; flex: none; }
   .spaces .foot { margin-top: auto; }
@@ -97,22 +97,24 @@
   .tabs { height: 29px; flex: none; display: flex; align-items: center; gap: 14px; padding: 0 12px; border-bottom: 1px solid var(--border); }
   .tabs .tab { font-size: 12px; color: #5b5c5f; }
   .tabs .tab.on { color: #abafb5; }
-  .scroll { flex: 1; min-height: 0; padding: 14px 16px; display: flex; flex-direction: column; gap: 12px; }
-  .msg { font-size: 13.5px; color: #989a9d; line-height: 1.55; }
+  .scroll { flex: 1; min-height: 0; padding: 14px 16px; display: flex; flex-direction: column; gap: 12px; overflow: hidden; }
+  .msg { font-size: 13.5px; color: #a2a4a7; line-height: 1.55; }
   .msg b { color: #c9cacb; font-weight: 600; }
   .msg ul { margin: 6px 0 0 18px; }
   .msg li { margin: 2px 0; }
   .msg code { font-family: "SF Mono", Menlo, monospace; font-size: 12px; background: #101114; border-radius: 4px; padding: 1px 5px; color: #c7ccd4; }
   .tool { display: flex; align-items: center; gap: 8px; font-size: 12px; color: #6a6b6e; }
   .took { font-size: 10.5px; color: #4d4e51; background: #1a1c1f; border-radius: 99px; padding: 2px 7px; }
-  .block { background: #062a20; border-radius: 6px; padding: 10px 12px; font-family: "SF Mono", Menlo, monospace; font-size: 12px; line-height: 1.6; color: #8cc6a8; white-space: pre; }
-  .block .out { color: #6f9b84; }
+  .block { background: #062a20; border-radius: 6px; padding: 10px 12px; font-family: "SF Mono", Menlo, monospace; font-size: 12px; line-height: 1.6; color: #6f9b84; white-space: pre; }
+  .block .cmd { color: #7df9ff; }
+  .block .ok { color: #98c379; }
+  .indigo { background: #19103a; border-radius: 6px; padding: 12px 14px; font-family: "SF Mono", Menlo, monospace; font-size: 12.5px; line-height: 1.7; color: #fff7ff; white-space: pre-wrap; }
   .input {
-    margin: 0 -16px; padding: 10px 16px 8px; flex: none;
+    margin: 0; padding: 12px 16px 10px; flex: none;
     border-top: 1px solid #ff00cc; border-bottom: 1px solid #ff00cc;
   }
-  .caret { display: inline-block; width: 2px; height: 16px; background: #c7ccd4; vertical-align: text-bottom; }
-  .model { padding: 8px 2px 0; font-size: 12px; color: #ae0b81; }
+  .caret { display: inline-block; width: 2px; height: 16px; background: #c7ccd4; }
+  .model { padding: 8px 2px 0; font-size: 12px; color: #c2159b; }
 
   /* the Plannotator panel */
   .panel {
@@ -121,7 +123,7 @@
     display: flex; flex-direction: column; overflow: hidden; color: var(--body);
   }
   .p-head { height: 42px; flex: none; display: flex; align-items: center; gap: 8px; padding: 0 14px; border-bottom: 1px solid var(--border); }
-  .p-head .title { color: var(--title); font-weight: 600; font-size: 13px; }
+  .p-head .title { color: #d4d5d7; font-weight: 600; font-size: 13px; }
   .p-head .spacer { flex: 1; }
   .ibtn { width: 24px; height: 24px; display: flex; align-items: center; justify-content: center; color: var(--muted); }
   .p-scroll { flex: 1; min-height: 0; overflow: hidden; display: flex; flex-direction: column; align-items: center; }
@@ -134,9 +136,9 @@
   .t-line { display: flex; align-items: center; gap: 6px; }
   .t-line .dot { width: 7px; height: 7px; border-radius: 50%; flex: none; }
   .t-line .proj { flex: 1; font-size: 11px; color: var(--dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .t-line .proj.here { color: var(--accent-name); }
+  .t-line .proj.here { color: var(--accent); }
   .t-line .age { font-size: 11px; color: var(--dim); }
-  .t-sub { margin-top: 2px; font-size: 13px; color: var(--body); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .t-sub { margin-top: 4px; font-size: 13px; color: #98999b; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .more { height: 28px; margin: 0 6px; padding: 0 12px; display: flex; align-items: center; font-size: 11.5px; color: var(--dim); }
 
   .p-label2 { height: 24px; margin-top: 10px; display: flex; align-items: center; padding: 0 14px; font-size: 11px; color: var(--dim); }
@@ -158,6 +160,9 @@
     height: 27px; flex: none; border-top: 1px solid var(--hairline);
     display: flex; align-items: center; padding: 0 16px; font-size: 12px; color: #707173;
   }
+  .status .end { margin-left: auto; display: flex; align-items: center; gap: 14px; }
+  .status .right { color: #98999b; }
+  .status .pill { color: #696a6d; background: #1a1c1f; border-radius: 99px; padding: 2px 8px; }
 </style>
 </head>
 <body>
@@ -194,6 +199,9 @@
       <div class="srow"><span class="dot" style="background:#5b8def"></span><span class="name">portfolio</span></div>
       <div class="srow"><span class="dot" style="background:#8f7ad6"></span><span class="name">labs</span></div>
       <div class="srow"><span class="dot" style="background:#4fb3c9"></span><span class="name">scratch</span></div>
+      <div class="srow"><span class="dot" style="background:#c98ad4"></span><span class="name">docs-site</span></div>
+      <div class="srow"><span class="dot" style="background:#d6b04e"></span><span class="name">billing</span><span class="tail">3</span></div>
+      <div class="srow"><span class="dot" style="background:#7f9e5f"></span><span class="name">infra</span></div>
       <div class="sect">
         <div class="agents-head">Agents</div>
         <div class="agents-head" style="color:#6f7073"><span class="dot" style="background:#76a8ff"></span>Done 1</div>
@@ -203,6 +211,8 @@
         <div class="agents-head" style="color:#6f7073"><span class="dot" style="background:#696a6d"></span>Idle 7</div>
         <div class="arow"><span class="dot" style="background:#696a6d"></span><span class="name">pi</span><span class="ago">1h</span></div>
         <div class="arow"><span class="dot" style="background:#696a6d"></span><span class="name">pi</span><span class="ago">3d</span></div>
+        <div class="arow"><span class="dot" style="background:#696a6d"></span><span class="name">pi</span><span class="ago">5d</span></div>
+        <div class="arow"><span class="dot" style="background:#696a6d"></span><span class="name">pi</span><span class="ago">1w</span></div>
       </div>
       <div class="foot">
         <div class="srow"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33h.08a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51h.08a1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82v.08a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg><span class="name">Settings</span></div>
@@ -216,18 +226,40 @@
         <div class="tabs"><span class="tab on">acme-api</span><span class="tab">scratch</span></div>
         <div class="scroll">
           <div class="tool" style="color:#55565a">⋯ 12 earlier lines</div>
+          <div class="tool">Read tests/checkout.test.ts <span class="took">0.2s</span></div>
           <div class="msg"><b>Fixed the flaky checkout test</b>
             <ul>
               <li>the matcher retried once on a slow clock; it now waits for the stub</li>
-              <li>ran the suite twice: green both times (<code>41 tests</code>)</li>
+              <li>ran the suite twice: green both times (<code>98 tests</code>)</li>
             </ul>
           </div>
-          <div class="tool">Read tests/checkout.test.ts <span class="took">0.2s</span></div>
           <div class="tool">Bash npm test <span class="took">18.4s</span></div>
+          <div class="block"><span class="cmd">$ npm test</span>
+
+  <span class="ok">✓ tests/checkout.test.ts (9)</span>
+  <span class="ok">✓ tests/queue.test.ts (14)</span>
+  <span class="ok">✓ tests/api.test.ts (18)</span>
+  <span class="ok">✓ tests/worker.test.ts (11)</span>
+  <span class="ok">✓ tests/webhook.test.ts (16)</span>
+
+  98 passing (7s)
+  2 skipped</div>
+          <div class="tool" style="color:#55565a">⋯ Thought for 12s</div>
+          <div class="msg"><b>While the suite ran, I looked at the job queue</b>
+            <ul>
+              <li>the worker polls every 5s and has no retry cap — a dead letter bin is the missing half</li>
+              <li>sketched the change in <code>src/queue/retry.ts</code>; not written yet</li>
+            </ul>
+          </div>
+          <div class="indigo">› the queue retries three times, then drops the job to the dead letter bin — want that on the metrics page too?</div>
           <div class="msg">Verification: <code>npm test</code> passes twice in a row, and the retry log shows one clean run per attempt.</div>
-          <div class="block">git commit -am "checkout: wait for the stub before matching"
+          <div class="block"><span class="cmd">$ git commit -am "checkout: wait for the stub before matching"</span>
 <span class="out">[fix/flaky-checkout 4f9c2e1] checkout: wait for the stub before matching
- 2 files changed, 31 insertions(+)</span></div>
+ 2 files changed, 31 insertions(+)</span>
+<span class="cmd">$ git push origin fix/flaky-checkout</span>
+<span class="out">Enumerating objects: 12, done.
+To github.com:acme/acme-api.git
+ * [new branch]      fix/flaky-checkout -> fix/flaky-checkout</span></div>
         </div>
         <div class="input"><span class="caret"></span></div>
         <div class="model">pi · sonnet · ctx 41% · 12.4k · $0.18 · 5:29</div>
@@ -317,7 +349,7 @@
     </div>
   </div>
 
-  <div class="status">This computer · main · 9 agents · 37 commands</div>
+  <div class="status">This computer · main · 9 agents · 37 commands<span class="end"><span class="pill">no updates</span><span class="right">zoom 100%</span></span></div>
 
 </body>
 </html>
