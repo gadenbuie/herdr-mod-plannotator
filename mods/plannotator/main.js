@@ -1021,7 +1021,13 @@ export default class Plannotator extends View {
           .child(mine ? "You" : String(m?.author?.name || m?.author?.host || "Agent")))
         .child(div().flex_none().text_size(11).text_color(t.dim).child(Number.isFinite(at) ? ago(at) : ""))
         .child(div().flex_1()))
-      .child(TextView.markdown(`pl-md-${m?.id}`, text || "_(no words)_"))
+      // The words a little larger than the panel's 13 px and set on air: an answer is the
+      // one thing on this page meant to be read at length. `TextView`'s markdown takes
+      // both from the box around it — and `line_height` takes a bare number as a multiple
+      // of the size, not pixels: `line_height(21)` is twenty-one times the text, which is
+      // a page of blank lines, not a looser one.
+      .child(div().w_full().text_size(14).line_height(1.6)
+        .child(TextView.markdown(`pl-md-${m?.id}`, text || "_(no words)_")))
       .when(pictures > 0, (el) => el.child(div().text_size(11).text_color(t.dim)
         .child(pictures === 1 ? "1 picture — open it in the Inbox" : `${pictures} pictures — open them in the Inbox`)));
   }
