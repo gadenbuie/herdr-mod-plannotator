@@ -466,28 +466,39 @@ export default class Plannotator extends View {
       cx?.notify();
       return;
     }
-    const seen = newestSeqOf(o.thread.messages);
+    const seen = newestSeqOf(o.thread.messages), id = o.id;
     this.reply = { busy: true, error: null };
     cx?.notify();
-    asked("POST", `messages/${target.id}/reply`, {
-      words,
-      // The person's picks made in the Inbox page are its own state and stay there:
-      // an empty list sends the words alone rather than dropping anything.
-      questions: [],
-      idempotency_key: `panel-${o.id}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`,
-      ...(seen > 0 ? { seen_through_seq: seen } : {}),
-    }).then(() => {
-      this.draft.set_value("");
-      this.reply = { busy: false, error: null };
-      this.loadThread(cx);
-    }).catch((e) => {
-      // The Inbox's own sentence — "The agent wrote again after you read this thread;
-      // your reply was not sent. Read it again, then reply." — and the words stay in the
-      // field: a reply that would not go out is the person's to send again, and a field
-      // emptied on a refusal would have thrown them away. The thread is read again
-      // either way, so "read it again" is already done by the time it is read.
-      this.reply = { busy: false, error: String(e?.message ?? e).split("\n")[0].slice(0, 200) };
-      this.loadThread(cx);
+    // `cx.spawn`, not the handler's context carried across an await: a context belongs
+    // to the call that made it, and the one the click was given is dead by the time the
+    // Inbox answers — using it there draws "cx is no longer valid" under the field. The
+    // callback's own context lives as long as the work does.
+    cx?.spawn(async (cx) => {
+      try {
+        await asked("POST", `messages/${target.id}/reply`, {
+          words,
+          // The person's picks made in the Inbox page are its own state and stay there:
+          // an empty list sends the words alone rather than dropping anything.
+          questions: [],
+          idempotency_key: `panel-${id}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`,
+          ...(seen > 0 ? { seen_through_seq: seen } : {}),
+        });
+        // The person may have gone back, or into another thread, while this was out:
+        // then the field on screen is that thread's and the words in it are not these.
+        if (this.opened?.id !== id) return;
+        this.draft.set_value("");
+        this.reply = { busy: false, error: null };
+        this.loadThread(cx);
+      } catch (e) {
+        if (this.opened?.id !== id) return;
+        // The Inbox's own sentence — "The agent wrote again after you read this thread;
+        // your reply was not sent. Read it again, then reply." — and the words stay in
+        // the field: a reply that would not go out is the person's to send again, and a
+        // field emptied on a refusal would have thrown them away. The thread is read
+        // again either way, so "read it again" is already done by the time it is read.
+        this.reply = { busy: false, error: String(e?.message ?? e).split("\n")[0].slice(0, 200) };
+        this.loadThread(cx);
+      }
     });
   }
 
