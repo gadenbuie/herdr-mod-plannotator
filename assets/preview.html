@@ -1,0 +1,323 @@
+<!doctype html>
+<!-- The drawn preview for RECIPE.md / README.md: the Plannotator panel in a
+     Herdr window, recreated as markup. Every name, path, subject and line in
+     here is invented; the palette and the layout are sampled from the real
+     app (see the photographed truth beside this file). 1600 × 1000 (8:5). -->
+<html>
+<head>
+<meta charset="utf-8">
+<title>Plannotator preview</title>
+<style>
+  :root {
+    --window: #101114;      /* the app's own background            */
+    --gutter: #131518;      /* the surface cards float on           */
+    --card: #17191d;        /* a card (terminal, panel)             */
+    --border: #2d2f32;      /* a card's neutral 1px border          */
+    --hairline: #26272a;    /* the title bar's and status bar's rule */
+    --divider: #292b2e;     /* the sidebar's right edge             */
+    --selected: #2c2e31;    /* the row the keys are on              */
+    --raised: #282a2d;      /* a selected button                    */
+    --fg: #eeeeef;          /* bright foreground                    */
+    --title: #c4c5c7;       /* panel title                          */
+    --body: #788089;        /* a subject line                       */
+    --muted: #6c6d70;       /* row labels, icons                    */
+    --dim: #57585b;         /* ages, paths, section labels          */
+    --accent: #96b2d7;      /* the periwinkle accent                */
+    --accent-name: #72859e; /* a project name in accent tint        */
+    --ink: #101114;         /* on accent                            */
+    --amber: #e5c07b;       /* ansi3 — a thread waiting on you     */
+    --blue: #76a8ff;        /* a thread new since you looked       */
+    --grey: #696a6d;       /* a read thread                        */
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { width: 1600px; height: 1000px; }
+  body {
+    font: 13px/1.4 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;
+    -webkit-font-smoothing: antialiased;
+    background: var(--window); color: var(--muted);
+    display: flex; flex-direction: column; overflow: hidden;
+  }
+  svg { display: inline-block; vertical-align: middle; }
+
+  /* ---- title bar ---- */
+  .titlebar {
+    height: 40px; flex: none; display: flex; align-items: center; gap: 8px;
+    padding: 0 14px; border-bottom: 1px solid var(--hairline);
+  }
+  .lights { display: flex; gap: 8px; margin: 0 10px 0 4px; }
+  .lights i { width: 12px; height: 12px; border-radius: 50%; }
+  .lights i:nth-child(1) { background: #ff5f57; }
+  .lights i:nth-child(2) { background: #febc2e; }
+  .lights i:nth-child(3) { background: #28c840; }
+  .appmark { margin-left: 34px; color: #f4f1e9; }
+  .appname { color: var(--fg); font-size: 13px; margin-left: 2px; }
+  .spacer { flex: 1; }
+  .tb-btn {
+    display: flex; align-items: center; gap: 6px; height: 26px;
+    padding: 0 8px; border-radius: 6px; color: #98999b; font-size: 12px;
+  }
+  .tb-btn.on { background: var(--raised); color: var(--fg); }
+  .chip {
+    background: var(--accent); color: var(--ink); border-radius: 99px;
+    font-size: 10.5px; line-height: 1; padding: 3px 6px; font-weight: 500;
+  }
+
+  /* ---- window body ---- */
+  .body { flex: 1; min-height: 0; display: flex; }
+
+  /* sidebar */
+  .spaces {
+    width: 248px; flex: none; border-right: 1px solid var(--divider);
+    padding: 16px 0 8px; display: flex; flex-direction: column; color: #909194;
+  }
+  .spaces .head { font-size: 11px; color: #5a5b5e; padding: 0 16px 12px; }
+  .srow { display: flex; align-items: center; gap: 12px; height: 30px; padding: 0 16px; font-size: 13px; }
+  .srow .dot { width: 7px; height: 7px; border-radius: 50%; flex: none; }
+  .srow .name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #b9b9bb; }
+  .srow .plus { color: #6f7073; font-size: 14px; }
+  .srow .tail { font-size: 10.5px; color: #4d4e51; background: #1a1c1f; border-radius: 99px; padding: 2px 6px; }
+  .sect { margin-top: 22px; }
+  .agents-head { display: flex; align-items: center; gap: 8px; font-size: 11px; color: #5a5b5e; padding: 0 16px 10px; }
+  .arow { display: flex; align-items: center; gap: 12px; height: 30px; padding: 0 16px; font-size: 13px; }
+  .arow .name { flex: 1; color: #b9b9bb; }
+  .arow .ago { font-size: 11px; color: #4d4e51; }
+  .arow .dot { width: 7px; height: 7px; border-radius: 50%; flex: none; }
+  .spaces .foot { margin-top: auto; }
+  .spaces .foot .srow { color: #757678; }
+
+  /* main gutter with the two cards */
+  .main { flex: 1; min-width: 0; background: var(--gutter); padding: 9px; display: flex; gap: 9px; }
+
+  /* the terminal card */
+  .term {
+    flex: 1; min-width: 0; background: var(--card);
+    border: 1px solid var(--accent); border-radius: 8px;
+    display: flex; flex-direction: column; overflow: hidden;
+  }
+  .tabs { height: 29px; flex: none; display: flex; align-items: center; gap: 14px; padding: 0 12px; border-bottom: 1px solid var(--border); }
+  .tabs .tab { font-size: 12px; color: #5b5c5f; }
+  .tabs .tab.on { color: #abafb5; }
+  .scroll { flex: 1; min-height: 0; padding: 14px 16px; display: flex; flex-direction: column; gap: 12px; }
+  .msg { font-size: 13.5px; color: #989a9d; line-height: 1.55; }
+  .msg b { color: #c9cacb; font-weight: 600; }
+  .msg ul { margin: 6px 0 0 18px; }
+  .msg li { margin: 2px 0; }
+  .msg code { font-family: "SF Mono", Menlo, monospace; font-size: 12px; background: #101114; border-radius: 4px; padding: 1px 5px; color: #c7ccd4; }
+  .tool { display: flex; align-items: center; gap: 8px; font-size: 12px; color: #6a6b6e; }
+  .took { font-size: 10.5px; color: #4d4e51; background: #1a1c1f; border-radius: 99px; padding: 2px 7px; }
+  .block { background: #062a20; border-radius: 6px; padding: 10px 12px; font-family: "SF Mono", Menlo, monospace; font-size: 12px; line-height: 1.6; color: #8cc6a8; white-space: pre; }
+  .block .out { color: #6f9b84; }
+  .input {
+    margin: 0 -16px; padding: 10px 16px 8px; flex: none;
+    border-top: 1px solid #ff00cc; border-bottom: 1px solid #ff00cc;
+  }
+  .caret { display: inline-block; width: 2px; height: 16px; background: #c7ccd4; vertical-align: text-bottom; }
+  .model { padding: 8px 2px 0; font-size: 12px; color: #ae0b81; }
+
+  /* the Plannotator panel */
+  .panel {
+    width: 367px; flex: none; background: var(--card);
+    border: 1px solid var(--border); border-radius: 10px;
+    display: flex; flex-direction: column; overflow: hidden; color: var(--body);
+  }
+  .p-head { height: 42px; flex: none; display: flex; align-items: center; gap: 8px; padding: 0 14px; border-bottom: 1px solid var(--border); }
+  .p-head .title { color: var(--title); font-weight: 600; font-size: 13px; }
+  .p-head .spacer { flex: 1; }
+  .ibtn { width: 24px; height: 24px; display: flex; align-items: center; justify-content: center; color: var(--muted); }
+  .p-scroll { flex: 1; min-height: 0; overflow: hidden; display: flex; flex-direction: column; align-items: center; }
+  .p-body { width: 100%; padding: 4px 0 10px; }
+  .label { height: 24px; display: flex; align-items: center; padding: 0 14px; font-size: 11px; color: var(--dim); }
+
+  .thread { margin: 0 6px; padding: 6px 12px; border-radius: 7px; }
+  .thread:hover { background: #1d1f23; }
+  .thread.on { background: var(--selected); }
+  .t-line { display: flex; align-items: center; gap: 6px; }
+  .t-line .dot { width: 7px; height: 7px; border-radius: 50%; flex: none; }
+  .t-line .proj { flex: 1; font-size: 11px; color: var(--dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .t-line .proj.here { color: var(--accent-name); }
+  .t-line .age { font-size: 11px; color: var(--dim); }
+  .t-sub { margin-top: 2px; font-size: 13px; color: var(--body); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .more { height: 28px; margin: 0 6px; padding: 0 12px; display: flex; align-items: center; font-size: 11.5px; color: var(--dim); }
+
+  .p-label2 { height: 24px; margin-top: 10px; display: flex; align-items: center; padding: 0 14px; font-size: 11px; color: var(--dim); }
+  .action { height: 30px; display: flex; align-items: center; gap: 9px; padding: 0 14px; font-size: 13px; color: var(--muted); }
+  .action svg { color: var(--muted); flex: none; }
+  .action .grow { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .action .path { font-size: 11px; color: var(--dim); }
+  .tree-toggle { height: 26px; margin: 0 6px; padding: 0 8px 0 20px; display: flex; align-items: center; gap: 6px; border-radius: 6px; }
+  .tree-toggle .grow { flex: 1; font-size: 13px; color: var(--muted); }
+  .tree-toggle .count { font-size: 13px; color: var(--muted); }
+  .node { height: 24px; margin: 0 6px; padding-right: 8px; display: flex; align-items: center; gap: 6px; border-radius: 6px; }
+  .node.d1 { padding-left: 32px; }
+  .node.d2 { padding-left: 44px; }
+  .node .grow { flex: 1; font-size: 13px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .node .pen { width: 18px; height: 18px; flex: none; display: flex; align-items: center; justify-content: center; color: var(--dim); }
+
+  /* status bar */
+  .status {
+    height: 27px; flex: none; border-top: 1px solid var(--hairline);
+    display: flex; align-items: center; padding: 0 16px; font-size: 12px; color: #707173;
+  }
+</style>
+</head>
+<body>
+
+  <!-- title bar -->
+  <div class="titlebar">
+    <div class="lights"><i></i><i></i><i></i></div>
+    <svg class="appmark" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><rect x="2" y="2" width="12" height="12" rx="3"/><path d="M5.5 8h5"/><path d="M5.5 5.5h3"/></svg>
+    <span class="appname">Herdr</span>
+    <span class="spacer"></span>
+    <div class="tb-btn">+</div>
+    <div class="tb-btn">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 7h-3a2 2 0 0 1-2-2V2"/><path d="M9 18a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h7l4 4v10a2 2 0 0 1-2 2Z"/><path d="M3 7.6v12.8A1.6 1.6 0 0 0 4.6 22h9.8"/></svg>
+      Files
+    </div>
+    <div class="tb-btn">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="18" r="3"/><circle cx="6" cy="6" r="3"/><path d="M13 6h3a2 2 0 0 1 2 2v7"/><path d="M11 18H8a2 2 0 0 1-2-2V9"/></svg>
+      Changes
+    </div>
+    <div class="tb-btn on">
+      <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><path d="M9.5 1.5H4a1 1 0 0 0-1 1v11a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1V5z"/><path d="M9.5 1.5V5H13"/><path d="M5.8 9.4l1.7 1.7 3-3.3"/></svg>
+      Plannotator
+      <span class="chip">2</span>
+    </div>
+  </div>
+
+  <div class="body">
+
+    <!-- spaces sidebar -->
+    <div class="spaces">
+      <div class="head">Spaces</div>
+      <div class="srow"><span class="dot" style="background:#22a99a"></span><span class="name">acme-api</span><span class="tail">2</span></div>
+      <div class="srow"><span class="dot" style="background:#e99a72"></span><span class="name">notes-app</span></div>
+      <div class="srow"><span class="dot" style="background:#5b8def"></span><span class="name">portfolio</span></div>
+      <div class="srow"><span class="dot" style="background:#8f7ad6"></span><span class="name">labs</span></div>
+      <div class="srow"><span class="dot" style="background:#4fb3c9"></span><span class="name">scratch</span></div>
+      <div class="sect">
+        <div class="agents-head">Agents</div>
+        <div class="agents-head" style="color:#6f7073"><span class="dot" style="background:#76a8ff"></span>Done 1</div>
+        <div class="arow"><span class="dot" style="background:#76a8ff"></span><span class="name">pi</span><span class="ago">12m</span></div>
+        <div class="agents-head" style="color:#6f7073"><span class="dot" style="background:#e5c07b"></span>Working 1</div>
+        <div class="arow"><span class="dot" style="background:#e5c07b"></span><span class="name">pi</span><span class="ago">now</span></div>
+        <div class="agents-head" style="color:#6f7073"><span class="dot" style="background:#696a6d"></span>Idle 7</div>
+        <div class="arow"><span class="dot" style="background:#696a6d"></span><span class="name">pi</span><span class="ago">1h</span></div>
+        <div class="arow"><span class="dot" style="background:#696a6d"></span><span class="name">pi</span><span class="ago">3d</span></div>
+      </div>
+      <div class="foot">
+        <div class="srow"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33h.08a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51h.08a1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82v.08a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg><span class="name">Settings</span></div>
+        <div class="srow"><span class="name">+ Add machine</span></div>
+      </div>
+    </div>
+
+    <!-- terminal -->
+    <div class="main">
+      <div class="term">
+        <div class="tabs"><span class="tab on">acme-api</span><span class="tab">scratch</span></div>
+        <div class="scroll">
+          <div class="tool" style="color:#55565a">⋯ 12 earlier lines</div>
+          <div class="msg"><b>Fixed the flaky checkout test</b>
+            <ul>
+              <li>the matcher retried once on a slow clock; it now waits for the stub</li>
+              <li>ran the suite twice: green both times (<code>41 tests</code>)</li>
+            </ul>
+          </div>
+          <div class="tool">Read tests/checkout.test.ts <span class="took">0.2s</span></div>
+          <div class="tool">Bash npm test <span class="took">18.4s</span></div>
+          <div class="msg">Verification: <code>npm test</code> passes twice in a row, and the retry log shows one clean run per attempt.</div>
+          <div class="block">git commit -am "checkout: wait for the stub before matching"
+<span class="out">[fix/flaky-checkout 4f9c2e1] checkout: wait for the stub before matching
+ 2 files changed, 31 insertions(+)</span></div>
+        </div>
+        <div class="input"><span class="caret"></span></div>
+        <div class="model">pi · sonnet · ctx 41% · 12.4k · $0.18 · 5:29</div>
+      </div>
+
+      <!-- the panel -->
+      <div class="panel">
+        <div class="p-head">
+          <span class="title">Plannotator</span>
+          <span class="chip">2</span>
+          <span class="spacer"></span>
+          <span class="ibtn"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="6.5"/><path d="m20 20-4-4"/></svg></span>
+          <span class="ibtn"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M10 9H8"/><path d="M16 13H8"/><path d="M16 17H8"/></svg></span>
+        </div>
+        <div class="p-scroll">
+          <div class="p-body">
+            <div class="label">Threads</div>
+
+            <div class="thread on">
+              <div class="t-line"><span class="dot" style="background:var(--amber)"></span><span class="proj here">acme-api</span><span class="age">now</span></div>
+              <div class="t-sub">Which database for the job queue?</div>
+            </div>
+            <div class="thread">
+              <div class="t-line"><span class="dot" style="background:var(--amber)"></span><span class="proj">notes-app</span><span class="age">8m</span></div>
+              <div class="t-sub">Ship the onboarding docs today?</div>
+            </div>
+            <div class="thread">
+              <div class="t-line"><span class="dot" style="background:var(--blue)"></span><span class="proj">notes-app</span><span class="age">26m</span></div>
+              <div class="t-sub">Summary: the flaky checkout test</div>
+            </div>
+            <div class="thread">
+              <div class="t-line"><span class="dot" style="background:var(--grey)"></span><span class="proj here">acme-api</span><span class="age">2h</span></div>
+              <div class="t-sub">Deploy plan for Friday</div>
+            </div>
+            <div class="thread">
+              <div class="t-line"><span class="dot" style="background:var(--grey)"></span><span class="proj">portfolio</span><span class="age">3d</span></div>
+              <div class="t-sub">PR review: the settings page</div>
+            </div>
+            <div class="more">2 more in the Inbox</div>
+
+            <div class="p-label2">Annotate</div>
+            <div class="action">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.375 2.625a1 1 0 0 1 3 3l-9.013 9.014a2 2 0 0 1-.853.505l-2.873.84a.5.5 0 0 1-.62-.62l.84-2.873a2 2 0 0 1 .506-.852z"/></svg>
+              <span class="grow">Last message</span>
+            </div>
+            <div class="action">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="18" r="3"/><circle cx="6" cy="6" r="3"/><path d="M13 6h3a2 2 0 0 1 2 2v7"/><path d="M11 18H8a2 2 0 0 1-2-2V9"/></svg>
+              <span class="grow">Review changes</span>
+            </div>
+            <div class="action">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12.83 2.18a2 2 0 0 0-1.66 0L2.6 6.08a1 1 0 0 0 0 1.83l8.58 3.91a2 2 0 0 0 1.66 0l8.58-3.9a1 1 0 0 0 0-1.83z"/><path d="M2 12a1 1 0 0 0 .58.91l8.6 3.91a2 2 0 0 0 1.65 0l8.58-3.9A1 1 0 0 0 22 12"/><path d="M2 17a1 1 0 0 0 .58.91l8.6 3.91a2 2 0 0 0 1.65 0l8.58-3.9A1 1 0 0 0 22 17"/></svg>
+              <span class="grow">This space</span>
+              <span class="path">~/play/acme-api</span>
+            </div>
+            <div class="tree-toggle">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 7h-3a2 2 0 0 1-2-2V2"/><path d="M9 18a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h7l4 4v10a2 2 0 0 1-2 2Z"/><path d="M3 7.6v12.8A1.6 1.6 0 0 0 4.6 22h9.8"/></svg>
+              <span class="grow">Files</span>
+            </div>
+            <div class="node d1">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/></svg>
+              <span class="grow">src</span>
+              <span class="pen"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.375 2.625a1 1 0 0 1 3 3l-9.013 9.014a2 2 0 0 1-.853.505l-2.873.84a.5.5 0 0 1-.62-.62l.84-2.873a2 2 0 0 1 .506-.852z"/></svg></span>
+            </div>
+            <div class="node d2">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/></svg>
+              <span class="grow">queue</span>
+              <span class="pen"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.375 2.625a1 1 0 0 1 3 3l-9.013 9.014a2 2 0 0 1-.853.505l-2.873.84a.5.5 0 0 1-.62-.62l.84-2.873a2 2 0 0 1 .506-.852z"/></svg></span>
+            </div>
+            <div class="node d2">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M10 9H8"/><path d="M16 13H8"/><path d="M16 17H8"/></svg>
+              <span class="grow">worker.ts</span>
+            </div>
+            <div class="node d1">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M10 9H8"/><path d="M16 13H8"/><path d="M16 17H8"/></svg>
+              <span class="grow">package.json</span>
+            </div>
+            <div class="action">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 10v6"/><path d="M9 13h6"/><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/></svg>
+              <span class="grow">Another folder…</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="status">This computer · main · 9 agents · 37 commands</div>
+
+</body>
+</html>
