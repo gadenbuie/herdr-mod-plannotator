@@ -24,7 +24,7 @@
 // so this is the way in by keyboard. Those two are the only copies that float.
 
 import { View, div, svg } from "gpui-kit";
-import { v_flex, h_flex, InputState, Input, TextView } from "gpui-base";
+import { v_flex, h_flex, InputState, Input, TextView, TextareaState, Textarea } from "gpui-base";
 import {
   spaces, focused, panes, exec, run, theme, props, openOverlay, closeOverlay,
   notify, watchFolder, pickFolder, home, appHome, nextCommand, keys, shared, setShared,
@@ -245,6 +245,22 @@ function ago(ms) {
   return `${Math.floor(m / 10080)}w`;
 }
 
+// The newest `seq` a thread's messages carry: the cursor both the seen request and a
+// reply's staleness guard are written against.
+function newestSeqOf(messages) {
+  return (messages ?? []).reduce((most, m) => Math.max(most, Number(m?.seq) || 0), 0);
+}
+
+// The message an answer goes to: the last one an agent wrote. A person's own message
+// ends the thread when they spoke last, and its reply is still the agent's last word.
+function lastAgentOf(messages) {
+  const list = messages ?? [];
+  for (let i = list.length - 1; i >= 0; i -= 1) {
+    if (list[i]?.author?.kind === "agent") return list[i];
+  }
+  return null;
+}
+
 // A message's words, as the panel can draw them, and how many pictures it had.
 //
 // The agents write in markdown, and `TextView` renders it — lists, tables and code
@@ -295,6 +311,13 @@ export default class Plannotator extends View {
     // failed read leaves. A thread is a place in the panel, not an overlay — back to
     // the list is `back()`, and Esc is the same.
     this.opened = null;
+    // The reply field, and what the last Send did. The field is retained state, made
+    // once when the panel's first thread opens and kept from thread to thread, rather
+    // than in a render, which would throw away what was typed. `writing` is whether the
+    // keyboard is in it: the panel's own ↑/↓/Return have to stay off a caret's keys.
+    this.draft = null;
+    this.writing = false;
+    this.reply = null;
     // `at` is the palette's highlighted row; `cursor` is the panel's.
     this.cursor = 0;
     // A launch closes the popup it was picked from; the close must land once.
@@ -395,8 +418,77 @@ export default class Plannotator extends View {
   openThread(id, cx) {
     this.opened = { id, thread: null, error: null };
     this.cursor = 0;
+    // A new thread starts with an empty field: what was half-written in another one is
+    // not this thread's reply, and the Inbox's own page keeps a draft per thread rather
+    // than carrying one across.
+    this.field(cx).set_value("");
+    this.reply = null;
     cx.notify();
     this.loadThread(cx);
+  }
+
+  // The reply field, made on first use. `TextareaState.new` needs a live host call, so
+  // this is only ever reached from an event handler (`openThread`), never from a render.
+  field(cx) {
+    if (this.draft) return this.draft;
+    this.draft = TextareaState.new({ placeholder: "Write a reply…" });
+    // Two rows, and as many more as the words need, up to eight: a reply in a 368 px
+    // column wraps early, and a box that clipped the fifth line would be the one thing
+    // the person cannot see in their own words.
+    this.draft.set_auto_grow(2, 8);
+    this.draft.on("change", (_e, cx) => {
+      if (this.reply?.error) this.reply = null;
+      cx.notify();
+    });
+    // Cmd+Return is the keyboard's Send, where the host reports the modifier; a plain
+    // Return is a new line in a reply that may be a paragraph. The button beside the
+    // field is the way that always works, so a host that does not report the modifier
+    // costs the key, not the reply.
+    this.draft.on("submit", (e, cx) => { if (e?.secondary === true) this.send(cx); });
+    // Which keys are the field's: a focused textarea keeps all of them but Esc.
+    this.draft.on("focus", (_e, cx) => { this.writing = true; cx.notify(); });
+    this.draft.on("blur", (_e, cx) => { this.writing = false; cx.notify(); });
+    return this.draft;
+  }
+
+  // Send the field to the agent that spoke last in this thread, which is the message
+  // the Inbox page answers: one POST of the words, and no answers with them — a pick is
+  // the page's, where the choices and the pictures are. `seen_through_seq` is the newest
+  // message drawn here, so the Inbox can refuse the reply when the agent wrote after the
+  // person read, which is what `thread_moved_on` means; the field keeps the words, and
+  // the thread is read again to show what moved it.
+  send(cx) {
+    const o = this.opened, words = String(this.draft?.value() ?? "").trim();
+    if (!o?.thread || !words || this.reply?.busy) return;
+    const target = lastAgentOf(o.thread.messages);
+    if (!target) {
+      this.reply = { busy: false, error: "This thread has no agent message to answer." };
+      cx?.notify();
+      return;
+    }
+    const seen = newestSeqOf(o.thread.messages);
+    this.reply = { busy: true, error: null };
+    cx?.notify();
+    asked("POST", `messages/${target.id}/reply`, {
+      words,
+      // The person's picks made in the Inbox page are its own state and stay there:
+      // an empty list sends the words alone rather than dropping anything.
+      questions: [],
+      idempotency_key: `panel-${o.id}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`,
+      ...(seen > 0 ? { seen_through_seq: seen } : {}),
+    }).then(() => {
+      this.draft.set_value("");
+      this.reply = { busy: false, error: null };
+      this.loadThread(cx);
+    }).catch((e) => {
+      // The Inbox's own sentence — "The agent wrote again after you read this thread;
+      // your reply was not sent. Read it again, then reply." — and the words stay in the
+      // field: a reply that would not go out is the person's to send again, and a field
+      // emptied on a refusal would have thrown them away. The thread is read again
+      // either way, so "read it again" is already done by the time it is read.
+      this.reply = { busy: false, error: String(e?.message ?? e).split("\n")[0].slice(0, 200) };
+      this.loadThread(cx);
+    });
   }
 
   loadThread(cx) {
@@ -429,7 +521,7 @@ export default class Plannotator extends View {
   // is answered or marked read in the Inbox.
   markSeen(id, messages, row) {
     if (!(row?.unseen > 0)) return;
-    const newest = messages.reduce((most, m) => Math.max(most, Number(m?.seq) || 0), 0);
+    const newest = newestSeqOf(messages);
     if (newest <= 0) return;
     asked("POST", `threads/${id}/seen`, { through_seq: newest }).catch(() => {
       // A dot that stays is the Inbox's answer, and the next read shows whatever it
@@ -443,6 +535,9 @@ export default class Plannotator extends View {
     if (!this.opened) return false;
     this.opened = null;
     this.cursor = 0;
+    // The field is a thread's, so the keys are the panel's again: a `writing` left true
+    // would keep ↑/↓ dead on a page that draws no field.
+    this.writing = false;
     cx?.notify();
     return true;
   }
@@ -751,6 +846,10 @@ export default class Plannotator extends View {
       // that opens over it. The panel gets the keyboard on a click; Esc has nothing to
       // close there, so it is left to the app.
       .track_focus(this.handle).on_key_down((e, cx) => {
+        // The reply field has the keyboard: Esc still goes back, and every other key is
+        // the caret's. A list highlight that moved on each arrow typed into a sentence,
+        // and ran a row when the person meant a new line, would be unusable.
+        if (this.writing && e.key !== "escape") return;
         // Stops at the ends, as the palette does: wrapping jumps out of sight.
         const last = Math.max(0, ids.length - 1);
         if (this.cursor > last) this.cursor = last;
@@ -846,6 +945,23 @@ export default class Plannotator extends View {
       .hover((s) => s.bg(t.hover)).cursor_pointer().on_click(() => this.respond())
       .child(svg(`${ICONS}/${icon}.svg`).size(14).flex_none().text_color(t.muted))
       .child(div().flex_1().min_w(0).truncate().text_color(sel(id) ? t.foreground : t.muted).child(label));
+    // The reply: a field, and a Send beside it. The words go to the agent that spoke
+    // last; the picks, the pictures and the rest stay in the page, which is the row
+    // under it. Nothing is drawn while the thread is still being read — a Send with no
+    // messages behind it has nothing to answer.
+    const words = String(this.draft?.value() ?? "").trim();
+    const full = Boolean(th && this.draft) && lastAgentOf(messages) !== null;
+    const field = () => v_flex().id("pl-reply").flex_none().px(12).py(6).gap(6)
+      .child(h_flex().items_end().gap(8).px(10).py(7).rounded(9).border_1()
+        .border_color(this.writing ? t.accent : t.input).bg(t.background)
+        .child(div().flex_1().min_w(0).child(Textarea.new(this.draft)))
+        .child(h_flex().id("pl-send").h(26).flex_none().px(10).items_center().rounded(6)
+          .when(words && !this.reply?.busy, (el) => el.cursor_pointer().bg(t.solid).text_color(t.solid_foreground)
+            .hover((s) => s.bg(t.accent).text_color(t.accent_foreground)))
+          .when(!words || Boolean(this.reply?.busy), (el) => el.bg(t.surface).text_color(t.dim))
+          .on_click((_e, cx) => this.send(cx))
+          .child(div().text_size(12).child(this.reply?.busy ? "Sending…" : "Send"))))
+      .when(Boolean(this.reply?.error), (el) => el.child(div().text_size(11.5).text_color(t.blocked).child(this.reply.error)));
     return v_flex().id("pl-thread").w_full().max_w(760).py(4).pb(10)
       .child(h_flex().h(24).flex_none().px(14).gap(6).items_center()
         .child(div().flex_1().min_w(0).truncate().text_size(11).text_color(t.dim)
@@ -855,7 +971,8 @@ export default class Plannotator extends View {
       .when(Boolean(o?.error), (el) => el.child(div().mx(14).mb(4).text_size(11.5).text_color(t.blocked).child(o.error)))
       .children(messages.map((m) => this.renderMessage(m)))
       .when(Boolean(th) && messages.length === 0, (el) => el.child(div().px(14).py(6).text_color(t.muted).child("This thread has no messages.")))
-      .child(respond("respond", "square-pen", "Reply in the Inbox"));
+      .when(full, (el) => el.child(field()))
+      .child(respond("respond", "file-text", "Picks and pictures in the Inbox"));
   }
 
   // One message: the author and its age, then its words. The person's own messages sit
