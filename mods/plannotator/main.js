@@ -1012,7 +1012,10 @@ export default class Plannotator extends View {
     const { text, pictures } = wordsOf(m?.body);
     const at = Date.parse(m?.created_at);
     return v_flex().id(`pl-msg-${m?.id}`).w_full().px(12).py(7).mx(6).rounded(8).gap(3)
-      .when(mine, (el) => el.bg(t.popover).pl(10).border_l(2).border_color(t.accent))
+      // The accent edge is square: a rounded corner either side of it would bend the rule
+      // away from the words it marks, so the left of the box is a plain corner and only
+      // the right stays rounded.
+      .when(mine, (el) => el.bg(t.popover).pl(10).border_l(2).border_color(t.accent).rounded_tl(0).rounded_bl(0))
       .child(h_flex().gap(6).items_center()
         .child(div().text_size(11).font_semibold().text_color(mine ? t.accent : t.muted)
           .child(mine ? "You" : String(m?.author?.name || m?.author?.host || "Agent")))
