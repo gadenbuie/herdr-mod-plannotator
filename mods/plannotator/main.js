@@ -1,10 +1,10 @@
-// Plannotator in the tab bar: what is waiting in the Inbox, and its actions.
+// Plannotator in the tab bar: what is waiting in the Inbox, its threads, and its actions.
 //
 // Herdr can't draw a web page, so every Plannotator surface stays in the person's
 // browser. This panel says what waits in the Inbox — its own list of threads, with a
 // dot for what each needs: yellow when the Inbox has it waiting on the person, blue
-// when it is new since they last looked, grey when it is read — opens the Inbox, and
-// starts
+// when it is new since they last looked, grey when it is read — reads a thread's
+// messages in the panel, opens the Inbox, and starts
 // `plannotator last | review | annotate` in the background: the CLI prints the page's
 // address, the browser opens it, and the decision comes out at the end of the run's
 // log. No tab, no window. Its file tree is how a single file or folder is annotated:
@@ -24,7 +24,7 @@
 // so this is the way in by keyboard. Those two are the only copies that float.
 
 import { View, div, svg } from "gpui-kit";
-import { v_flex, h_flex, InputState, Input } from "gpui-base";
+import { v_flex, h_flex, InputState, Input, TextView } from "gpui-base";
 import {
   spaces, focused, panes, exec, run, theme, props, openOverlay, closeOverlay,
   notify, watchFolder, pickFolder, home, appHome, nextCommand, keys, shared, setShared,
@@ -42,15 +42,36 @@ const BADGE = "plannotator.waiting";
 // The Inbox's own list model, over its loopback server. The records in `STORE` say who
 // wrote what; only the Inbox's own arithmetic turns that into "New since you looked",
 // "Waiting on you" and "Quiet" — it writes `person_seen_seq`, so it, and not a second
-// guess here, is what "unread" means. One `curl`, nothing to install: the port is in
-// `inbox.json`, and the route is the one the Inbox page itself opens with.
-const READ = String.raw`
+// guess here, is what "unread" means — and only its own window model holds a thread's
+// messages. One `curl`, nothing to install: the port is in `inbox.json`, and the
+// routes are the ones the Inbox page itself opens with. `$2` is the method, `$3` the
+// route under `/api/inbox/`, and `$4` the JSON a POST carries.
+const ASK = String.raw`
 cd "$1" || exit 0
-[ -f inbox.json ] || exit 0
+[ -f inbox.json ] || { printf '{"error":"The Inbox is not running"}'; exit 0; }
 p=$(sed -n 's/.*"port": *\([0-9][0-9]*\).*/\1/p' inbox.json | head -n 1)
-[ -n "$p" ] || exit 0
-command -v curl >/dev/null 2>&1 || exit 0
-curl -s -m 3 "http://127.0.0.1:$p/api/inbox/threads" || printf '{"error":"The Inbox is not running"}'
+[ -n "$p" ] || { printf '{"error":"The Inbox is not running"}'; exit 0; }
+command -v curl >/dev/null 2>&1 || { printf '{"error":"curl is missing"}'; exit 0; }
+if [ "$2" = POST ]; then
+  out=$(curl -s -m 5 -X POST -H 'Content-Type: application/json' -d "$4" "http://127.0.0.1:$p/api/inbox/$3") || out='{"error":"The Inbox did not answer"}'
+else
+  out=$(curl -s -m 5 "http://127.0.0.1:$p/api/inbox/$3") || out='{"error":"The Inbox did not answer"}'
+fi
+printf '%s' "$out"
+`;
+// The Inbox in the person's browser, on one page of it: `$1` is the page's own hash
+// route — `thread=<id>`, or empty for the list. `--background` is what keeps this to
+// one tab: it prints a running Inbox's address, or starts a stopped one without a
+// browser, and opens nothing, so the address can carry the route. With no browser
+// command at all (a remote session) the address is printed and the panel toasts it.
+const OPEN = String.raw`
+url=$(plannotator inbox --background 2>/dev/null) || exit 0
+[ -n "$url" ] || exit 0
+href="$url#$1"
+if command -v open >/dev/null 2>&1 && open "$href" 2>/dev/null; then exit 0; fi
+if command -v xdg-open >/dev/null 2>&1 && xdg-open "$href" >/dev/null 2>&1; then exit 0; fi
+printf '%s' "$href"
+exit 1
 `;
 // One level of a folder, read once per folder, the first time its row opens.
 const LIST = 'cd "$1" || exit 0; n=0; for p in * .[!.]* ..?*; do [ -e "$p" ] || [ -L "$p" ] || continue; '
@@ -133,10 +154,32 @@ function fail(body) {
   notify({ title: "Plannotator", body: String(body ?? "Plannotator did not start").trim().slice(0, 200), level: "error" });
 }
 
-// `plannotator inbox --open` starts a stopped Inbox and returns at once.
-function openInbox() {
-  exec("plannotator", ["inbox", "--open"]).then((r) => {
-    if (r.code !== 0) fail(r.stderr || r.stdout || "The Inbox did not open");
+// The Inbox, asked once: `asked("GET", "threads")`, or a POST with its body. Its
+// answer is JSON either way, and a refusal is `{error}` with a code — both become one
+// thrown sentence, so a stale Inbox is a line in the panel rather than a stack.
+async function asked(method, route, body) {
+  const argv = ["-c", ASK, "plannotator", STORE(), method, route];
+  if (body !== undefined) argv.push(JSON.stringify(body));
+  const r = await exec("sh", argv);
+  let data;
+  try { data = JSON.parse(String(r.stdout ?? "").trim()); } catch {
+    throw new Error(String(r.stderr ?? "").trim().split("\n")[0] || "The Inbox did not answer");
+  }
+  if (data?.error) throw new Error(String(data.error));
+  return data;
+}
+
+// The Inbox in the person's browser: the list, or one thread of it (`hash` is the
+// page's own route, `thread=<id>`). Nothing is closed and no tab is left behind —
+// `OPEN` starts a stopped Inbox without a browser, so there is one tab, on the page
+// the person asked for. No browser command answers in a remote session: the address
+// is what the toast says instead.
+function openInbox(hash = "") {
+  exec("sh", ["-c", OPEN, "plannotator", hash]).then((r) => {
+    if (r.code === 0) return;
+    const where = String(r.stdout ?? "").trim();
+    if (where) notify({ title: "Plannotator", body: where });
+    else fail(r.stderr || "The Inbox did not open");
   }).catch((e) => fail(e?.message));
 }
 
@@ -155,12 +198,7 @@ function stateOf(section) {
   return section === "new" ? "unread" : "read";
 }
 
-function readThreads(stdout) {
-  const text = String(stdout ?? "").trim();
-  if (!text) return [];
-  let data;
-  try { data = JSON.parse(text); } catch { return []; }
-  if (data?.error) throw new Error(String(data.error));
+function readThreads(data) {
   if (!Array.isArray(data?.sections)) throw new Error("The Inbox answered in an unknown shape");
   // A row carries its project's id and name; the folder the space is in comes from the
   // projects list, which is the only place `root` lives.
@@ -207,6 +245,25 @@ function ago(ms) {
   return `${Math.floor(m / 10080)}w`;
 }
 
+// A message's words, as the panel can draw them, and how many pictures it had.
+//
+// The agents write in markdown, and `TextView` renders it — lists, tables and code
+// included — so only the two things it cannot do come off. `:::question` and
+// `:::action` are the Inbox's own block fences: the picks under them need the page,
+// but the words are the agent's, and the `- [ ]` choices and `Recommended:` line read
+// as what was asked. A picture is a path in the person's own files
+// (`![alt](/abs/a.png)`), which a mod cannot draw: it becomes its alt text, and the
+// count under the message says where the pictures are.
+function wordsOf(body) {
+  const pictures = (String(body ?? "").match(/!\[[^\]]*\]\([^)]*\)/g) ?? []).length;
+  const text = String(body ?? "")
+    .replace(/^:::[a-z-]*[^\n]*$/gm, "")
+    .replace(/!\[([^\]]*)\]\([^)]*\)/g, (_all, alt) => (alt ? `*${alt}*` : ""))
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+  return { text, pictures };
+}
+
 // A subsequence score, the way a palette reads; null when q isn't there at all.
 function fuzzy(q, text) {
   const t = text.toLowerCase();
@@ -233,6 +290,11 @@ export default class Plannotator extends View {
     this.ready = false;
     this.error = null;
     this.at = 0;
+    // The thread the person opened, or `null` while the panel shows the list: its id,
+    // the Inbox's own window model of it, the row it came from, and the one error a
+    // failed read leaves. A thread is a place in the panel, not an overlay — back to
+    // the list is `back()`, and Esc is the same.
+    this.opened = null;
     // `at` is the palette's highlighted row; `cursor` is the panel's.
     this.cursor = 0;
     // A launch closes the popup it was picked from; the close must land once.
@@ -306,9 +368,7 @@ export default class Plannotator extends View {
     }
     cx.spawn(async (cx) => {
       try {
-        const r = await exec("sh", ["-c", READ, "plannotator", STORE()]);
-        if (r.code !== 0) throw new Error(r.stderr || "Cannot read the Plannotator Inbox");
-        this.threads = readThreads(r.stdout);
+        this.threads = readThreads(await asked("GET", "threads"));
         this.error = null;
         // What the tab bar may show while this panel is collapsed. `setShared`
         // re-renders every mod, so it is written only when the number changes.
@@ -318,9 +378,79 @@ export default class Plannotator extends View {
         this.error = String(e?.message ?? e).split("\n")[0].slice(0, 160);
       } finally {
         this.ready = true;
+        // A thread on screen is read again with the list: the store is watched, so a
+        // message that lands while the person is reading it arrives at once, and the
+        // thread's own row — its dot, its open questions — is as fresh as the list's.
+        if (this.opened) this.loadThread(cx);
         cx.notify();
       }
     });
+  }
+
+  // ---- one thread ----
+
+  // A thread, opened in the panel. Its words are read from the Inbox's own window
+  // model (`GET threads/<id>`, the request its page makes for a thread) rather than
+  // from the store: the records say what was written, not what it adds up to.
+  openThread(id, cx) {
+    this.opened = { id, thread: null, error: null };
+    this.cursor = 0;
+    cx.notify();
+    this.loadThread(cx);
+  }
+
+  loadThread(cx) {
+    const id = this.opened?.id;
+    if (!id) return;
+    cx.spawn(async (cx) => {
+      try {
+        const data = await asked("GET", `threads/${id}`);
+        // The person may have gone back, or into another thread, while this was out.
+        if (this.opened?.id !== id) return;
+        if (!Array.isArray(data?.thread?.messages)) throw new Error("The Inbox answered in an unknown shape");
+        this.opened.thread = data.thread;
+        this.opened.error = null;
+        this.markSeen(id, data.thread.messages, data.row);
+      } catch (e) {
+        if (this.opened?.id !== id) return;
+        this.opened.error = String(e?.message ?? e).split("\n")[0].slice(0, 160);
+      } finally {
+        cx.notify();
+      }
+    });
+  }
+
+  // Reading a thread here marks it seen, which is what opening one in the Inbox page
+  // does: the Inbox's own `seen` cursor moves to the newest message drawn, and its
+  // blue "new since you looked" dot goes with it. It is deliberately not Mark read.
+  // That one also sets aside every open question the person leaves unanswered — the
+  // agent is told they skipped it — and a panel that cannot show the picks has no
+  // business making that call: a thread with an open question stays yellow until it
+  // is answered or marked read in the Inbox.
+  markSeen(id, messages, row) {
+    if (!(row?.unseen > 0)) return;
+    const newest = messages.reduce((most, m) => Math.max(most, Number(m?.seq) || 0), 0);
+    if (newest <= 0) return;
+    asked("POST", `threads/${id}/seen`, { through_seq: newest }).catch(() => {
+      // A dot that stays is the Inbox's answer, and the next read shows whatever it
+      // decided; there is nothing to say about a cursor that did not move.
+    });
+  }
+
+  // Back to the list. The panel's copy is a page, not an overlay, so this closes
+  // nothing: it puts the list back, which the next read has already kept fresh.
+  back(cx) {
+    if (!this.opened) return false;
+    this.opened = null;
+    this.cursor = 0;
+    cx?.notify();
+    return true;
+  }
+
+  // The thread in the Inbox page, where an answer, a pick or a picture can be made.
+  respond() {
+    const id = this.opened?.id;
+    if (id) openInbox(`thread=${id}`);
   }
 
   // A run that ended is announced in Herdr's own toast. The desktop banner said so
@@ -429,6 +559,10 @@ export default class Plannotator extends View {
   // then the annotate rows, then the tree. The keys walk this
   // order, so the row that is highlighted is always the row Return runs.
   rowIds() {
+    // A thread, open: the way to the Inbox on it, then the way back. The thread's own
+    // messages are not rows — they are what the person came to read, and nothing in
+    // them launches.
+    if (this.opened) return ["respond", "back"];
     const ids = [];
     for (let i = 0; i < Math.min(this.threads.length, SHOWN); i++) ids.push(`t${i}`);
     if (this.threads.length > SHOWN) ids.push("more");
@@ -445,7 +579,13 @@ export default class Plannotator extends View {
   // to the browser and takes the window down with it.
   runRow(id, cx) {
     if (!id) return;
-    if (/^t\d+$/.test(id) || id === "more") return this.launch(() => openInbox());
+    if (this.opened) {
+      if (id === "back") this.back(cx);
+      if (id === "respond") this.respond();
+      return;
+    }
+    if (/^t\d+$/.test(id)) return this.launch(() => this.openThread(this.threads[Number(id.slice(1))]?.id, cx));
+    if (id === "more") return this.launch(() => openInbox());
     if (id.startsWith("f:")) {
       const row = this.treeRows().find((r) => r.path === id.slice(2));
       if (!row) return;
@@ -592,8 +732,9 @@ export default class Plannotator extends View {
           .on_click(() => this.launch(() => this.annotate(path, true)))
           .child(svg(`${ICONS}/square-pen.svg`).size(12))));
     };
-    // Every row the tree shows, as the tree lists them.
-    const rows = this.treeRows().map((e) => node(e.path, e.name, e.dir, e.depth));
+    // Every row the tree shows, as the tree lists them. A thread on screen draws none
+    // of the list, so none of it is built: the elements are the cost of a render.
+    const rows = this.opened ? [] : this.treeRows().map((e) => node(e.path, e.name, e.dir, e.depth));
     // One of the annotate things: a 14 px icon, the name, hover fills.
     const action = (id, icon, label, go) => h_flex().id(`pl-a-${id}`).h(30).flex_none().px(14).gap(9).items_center()
       .when(sel(id), (el) => el.bg(t.selected))
@@ -616,21 +757,30 @@ export default class Plannotator extends View {
         if (e.key === "down") this.cursor = Math.min(this.cursor + 1, last);
         else if (e.key === "up") this.cursor = Math.max(this.cursor - 1, 0);
         else if (e.key === "enter") this.runRow(ids[this.cursor], cx);
-        else if (e.key === "escape") { if (!this.close()) return; }
+        else if (e.key === "escape") { if (!this.close() && !this.back(cx)) return; }
         else return;
         cx.stop_propagation();
         cx.notify();
       })
       .text_size(13).text_color(t.foreground)
       .child(h_flex().id("pl-head").h(42).flex_none().px(14).gap(8).items_center().border_b(1).border_color(t.border)
-        .child(div().font_semibold().child("Plannotator"))
-        .when(needs > 0, (el) => el.child(div().px(6).rounded(99).bg(t.accent).text_color(t.accent_foreground)
-          .text_size(10.5).child(String(needs))))
-        .child(div().flex_1())
+        // A thread on screen turns the header into the way back and the name of what
+        // is on it: the panel has one page at a time, and the list is one press behind.
+        .when(Boolean(this.opened), (el) => el
+          .child(this.iconButton("pl-back", "chevron-left", (_e, cx) => this.back(cx)))
+          .child(div().flex_1().min_w(0).truncate().font_semibold()
+            .child(this.opened?.thread?.subject || "Thread")))
+        .when(!this.opened, (el) => el
+          .child(div().font_semibold().child("Plannotator"))
+          .when(needs > 0, (el) => el.child(div().px(6).rounded(99).bg(t.accent).text_color(t.accent_foreground)
+            .text_size(10.5).child(String(needs))))
+          .child(div().flex_1()))
         .child(this.iconButton("pl-palette", "search", () => this.openPalette()))
-        .child(this.iconButton("pl-open", "file-text", () => this.launch(() => openInbox()))))
+        // One page, so one button: the Inbox on the thread that is open, or on its list.
+        .child(this.iconButton("pl-open", "file-text", () => this.launch(() => (this.opened ? this.respond() : openInbox())))))
       .child(v_flex().id("pl-scroll").flex_1().min_h(0).overflow_y_scrollbar().items_center()
-        .child(v_flex().id("pl-body").w_full().max_w(760).py(4).pb(10)
+        .when(Boolean(this.opened), (el) => el.child(this.renderThread(sel)))
+        .when(!this.opened, (el) => el.child(v_flex().id("pl-body").w_full().max_w(760).py(4).pb(10)
           .child(label("Threads"))
           .when(waiting.length === 0, (el) => el.child(v_flex().px(14).py(6).gap(3)
             .child(div().text_color(t.muted).child(this.ready ? "No threads yet" : "Reading the Inbox…"))
@@ -643,7 +793,8 @@ export default class Plannotator extends View {
           .children(waiting.map((th, i) =>
             v_flex().id(`pl-t-${i}`).flex_none().px(12).py(6).mx(6).gap(2).rounded(7)
               .when(sel(`t${i}`), (el) => el.bg(t.selected))
-              .hover((s) => s.bg(t.hover)).cursor_pointer().on_click(() => this.launch(() => openInbox()))
+              .hover((s) => s.bg(t.hover)).cursor_pointer()
+              .on_click((_e, cx) => this.openThread(th.id, cx))
               .child(h_flex().gap(6).items_center()
                 .child(div().flex_none().size(7).rounded(99).bg(dot[th.state] ?? t.dim))
                 .child(div().flex_1().min_w(0).truncate().text_size(11).text_color(here(th) ? t.accent : t.dim)
@@ -678,7 +829,51 @@ export default class Plannotator extends View {
               .child(div().flex_1().min_w(0).truncate().text_color(t.muted)
                 .child(open ? "Files" : `Files · ${this.kids.has(at) ? kids(at).length : "…"}`)))
             .children(rows))
-          .child(action("pick", "folder-plus", "Another folder…", () => this.pick()))))
+          .child(action("pick", "folder-plus", "Another folder…", () => this.pick())))))
+  }
+
+  // ---- a thread, drawn ----
+
+  // One thread, in the panel's own width: who wrote each message, when, and the words
+  // themselves as markdown. Everything here is read-only — an answer, a pick and a
+  // picture need the page — so the last row is the way there, on this thread.
+  renderThread(sel) {
+    const t = theme(), o = this.opened, th = o?.thread;
+    const messages = th?.messages ?? [];
+    const at = th ? Date.parse(th.messages?.[0]?.created_at) : NaN;
+    const respond = (id, icon, label) => h_flex().id(`pl-a-${id}`).h(30).flex_none().px(14).gap(9).items_center()
+      .when(sel(id), (el) => el.bg(t.selected))
+      .hover((s) => s.bg(t.hover)).cursor_pointer().on_click(() => this.respond())
+      .child(svg(`${ICONS}/${icon}.svg`).size(14).flex_none().text_color(t.muted))
+      .child(div().flex_1().min_w(0).truncate().text_color(sel(id) ? t.foreground : t.muted).child(label));
+    return v_flex().id("pl-thread").w_full().max_w(760).py(4).pb(10)
+      .child(h_flex().h(24).flex_none().px(14).gap(6).items_center()
+        .child(div().flex_1().min_w(0).truncate().text_size(11).text_color(t.dim)
+          .child([th?.project?.name, Number.isFinite(at) ? ago(at) : null].filter(Boolean).join(" · "))))
+      .when(!th && !o?.error, (el) => el.child(v_flex().px(14).py(6)
+        .child(div().text_color(t.muted).child("Reading the thread…"))))
+      .when(Boolean(o?.error), (el) => el.child(div().mx(14).mb(4).text_size(11.5).text_color(t.blocked).child(o.error)))
+      .children(messages.map((m) => this.renderMessage(m)))
+      .when(Boolean(th) && messages.length === 0, (el) => el.child(div().px(14).py(6).text_color(t.muted).child("This thread has no messages.")))
+      .child(respond("respond", "square-pen", "Reply in the Inbox"));
+  }
+
+  // One message: the author and its age, then its words. The person's own messages sit
+  // on `surface`, so a long thread still reads as a conversation rather than a wall.
+  renderMessage(m) {
+    const t = theme(), mine = m?.author?.kind === "person";
+    const { text, pictures } = wordsOf(m?.body);
+    const at = Date.parse(m?.created_at);
+    return v_flex().id(`pl-msg-${m?.id}`).w_full().px(12).py(7).mx(6).rounded(8).gap(3)
+      .when(mine, (el) => el.bg(t.surface))
+      .child(h_flex().gap(6).items_center()
+        .child(div().text_size(11).font_semibold().text_color(mine ? t.accent : t.muted)
+          .child(mine ? "You" : String(m?.author?.name || m?.author?.host || "Agent")))
+        .child(div().flex_none().text_size(11).text_color(t.dim).child(Number.isFinite(at) ? ago(at) : ""))
+        .child(div().flex_1()))
+      .child(TextView.markdown(`pl-md-${m?.id}`, text || "_(no words)_"))
+      .when(pictures > 0, (el) => el.child(div().text_size(11).text_color(t.dim)
+        .child(pictures === 1 ? "1 picture — open it in the Inbox" : `${pictures} pictures — open them in the Inbox`)));
   }
 
   // ---- a file's menu ----
