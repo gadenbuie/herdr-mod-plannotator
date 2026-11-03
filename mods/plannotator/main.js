@@ -990,7 +990,7 @@ export default class Plannotator extends View {
           .when(Boolean(c?.description), (el) => el.child(div().text_size(11).text_color(t.dim)
             .child(String(c.description)))));
     };
-    return v_flex().id(`pl-q-${m?.id}-${q?.key}`).w_full().flex_none().mt(2).overflow_hidden()
+    return v_flex().id(`pl-q-${m?.id}-${q?.key}`).w_full().flex_none().my(6).overflow_hidden()
       .rounded(8).border_1().border_color(t.border).bg(t.popover)
       .child(h_flex().flex_none().px(10).py(6).gap(7).items_center().border_b(1).border_color(t.border)
         .child(div().flex_none().size(7).rounded(99).bg(tone))
