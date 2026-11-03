@@ -341,6 +341,8 @@ export default class Plannotator extends View {
     // A save that is still out, and the last refusal under a card. The reply's Send waits
     // for the first, so a note typed a moment before Send goes with it.
     this.pending = null;
+    // Whether the person has asked for the whole conversation; see `renderThread`.
+    this.showAll = false;
     // One save at a time per question, chained by question id: see `savePick`.
     this.saving = new Map();
     this.cardError = null;
@@ -449,6 +451,8 @@ export default class Plannotator extends View {
     // than carrying one across.
     this.field(cx).set_value("");
     this.reply = null;
+    // The conversation starts folded: see `renderThread`.
+    this.showAll = false;
     this.forgetFields();
     cx.notify();
     this.loadThread(cx);
@@ -1331,6 +1335,22 @@ export default class Plannotator extends View {
   renderThread(sel) {
     const t = theme(), o = this.opened, th = o?.thread;
     const messages = th?.messages ?? [];
+    // A thread opens at its end. The panel cannot move a scroll box from script — the host
+    // hands out a scroll position only for a virtual list, and a virtual list's rows may not
+    // hold the click handlers a question card is made of — so the page is arranged to start
+    // at the newest rather than scrolled there: the last few messages are drawn, and the
+    // rest wait behind one row. `showAll` is the row's doing, and `openThread` clears it.
+    const keep = 3;
+    let cut = this.showAll ? 0 : Math.max(0, messages.length - keep);
+    // A question nobody has answered is never the thing behind the row: opening a thread is
+    // how the person finds out what it is waiting on.
+    if (cut > 0) {
+      const waiting = messages.findIndex((m) => (Array.isArray(m?.questions) ? m.questions : []).some((q) =>
+        q?.kind !== "action" && !q?.set_aside_at && !q?.superseded_by &&
+        !(q?.answer && (Number(q?.sent_revision) || 0) === (Number(q?.revision) || 0))));
+      if (waiting >= 0 && waiting < cut) cut = waiting;
+    }
+    const earlier = messages.slice(0, cut);
     const at = th ? Date.parse(th.messages?.[0]?.created_at) : NaN;
     const respond = (id, icon, label) => h_flex().id(`pl-a-${id}`).h(30).flex_none().px(14).gap(9).items_center()
       .when(sel(id), (el) => el.bg(t.selected))
@@ -1374,7 +1394,15 @@ export default class Plannotator extends View {
         .when(!th && !o?.error, (el) => el.child(v_flex().px(14).py(6)
           .child(div().text_color(t.muted).child("Reading the thread…"))))
         .when(Boolean(o?.error), (el) => el.child(div().mx(14).mb(4).text_size(11.5).text_color(t.blocked).child(o.error)))
-        .children(messages.map((m) => this.renderMessage(m)))
+        // The row that holds the rest: a count first, because "12 earlier messages" is a
+        // reason to look and "older" is not.
+        .when(earlier.length > 0, (el) => el.child(h_flex().id("pl-earlier").mx(12).mb(3).h(24).flex_none()
+          .px(8).gap(7).items_center().rounded(6)
+          .hover((st) => st.bg(t.hover)).cursor_pointer()
+          .on_click((_e, cx) => { this.showAll = true; cx.notify(); })
+          .child(div().text_size(11).text_color(t.accent)
+            .child(earlier.length === 1 ? "1 earlier message" : `${earlier.length} earlier messages`))))
+        .children(messages.slice(cut).map((m) => this.renderMessage(m)))
         .when(Boolean(th) && messages.length === 0,
           (el) => el.child(div().px(14).py(6).text_color(t.muted).child("This thread has no messages."))))
       // No bottom padding: the page row is the page's last pixel, sitting on the panel's
