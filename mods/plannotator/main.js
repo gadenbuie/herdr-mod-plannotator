@@ -39,6 +39,12 @@ const STORE = () => `${home()}/.plannotator/inbox`;
 // Nothing reads it today (tab-host has no badge yet — see its `HANDOFF.md`), and
 // writing it costs one comparison per read.
 const BADGE = "plannotator.waiting";
+// The panel's view, kept where tab-host can carry it from space to space:
+// `tab.state` in `mod.json` names this key, and tab-host keeps one value of it per
+// space — the space being left keeps its value, the one arriving gets its own back.
+// `saveState` writes it from the panel's own doings, `syncState` adopts it in
+// render(); null (or nothing there) is a fresh panel.
+const STATE = "plannotator.state";
 // The Inbox's own list model, over its loopback server. The records in `STORE` say who
 // wrote what; only the Inbox's own arithmetic turns that into "New since you looked",
 // "Waiting on you" and "Quiet" — it writes `person_seen_seq`, so it, and not a second
@@ -348,6 +354,10 @@ export default class Plannotator extends View {
     this.cardError = null;
     // `at` is the palette's highlighted row; `cursor` is the panel's.
     this.cursor = 0;
+    // What the shared state key held as this copy last saw it — what it wrote or
+    // took last — so `syncState` can tell another space's record from an echo of
+    // this one's own write.
+    this.stateJson = null;
     // A launch closes the popup it was picked from; the close must land once.
     this.closed = false;
     // The panel is a tab in the side panel, so it takes the keyboard when it is clicked
@@ -411,8 +421,11 @@ export default class Plannotator extends View {
     if (at !== this.folder) {
       this.folder = at;
       this.kids = new Map();
-      this.open = new Set();
       this.reading = new Set();
+      // The folders the person had open stay open when the tree's root moves — a
+      // carried record (`syncState`) can land before this does — but only the ones
+      // under the folder the tree now shows; paths from elsewhere are inert.
+      this.open = new Set([...this.open].filter((p) => at && (p === at || p.startsWith(`${at}/`))));
       // The space's own folder is read at once (its count, and an instant open);
       // every folder under it is read when its row opens.
       if (at) this.load(at, cx);
@@ -453,6 +466,7 @@ export default class Plannotator extends View {
     this.reply = null;
     // The conversation starts folded: see `renderThread`.
     this.showAll = false;
+    this.saveState();
     this.forgetFields();
     cx.notify();
     this.loadThread(cx);
@@ -551,6 +565,10 @@ export default class Plannotator extends View {
         if (!Array.isArray(data?.thread?.messages)) throw new Error("The Inbox answered in an unknown shape");
         this.opened.thread = data.thread;
         this.opened.error = null;
+        // A thread restored from the carried state (see `syncState`) arrived with no
+        // reply field, and a field cannot be made in a render — this task can make
+        // one, the same way `seedFields` makes its own.
+        if (!this.draft) this.field(cx);
         this.seedFields(cx);
         this.markSeen(id, data.thread.messages, data.row);
       } catch (e) {
@@ -588,9 +606,72 @@ export default class Plannotator extends View {
     // The field is a thread's, so the keys are the panel's again: a `writing` left true
     // would keep ↑/↓ dead on a page that draws no field.
     this.writing = false;
+    this.saveState();
     this.forgetFields();
     cx?.notify();
     return true;
+  }
+
+  // ---- the state that sticks to the space ----
+
+  // The panel's view as one small record: the thread on screen, whether the whole
+  // conversation is shown, the row the keys are on, and the folders the person has
+  // open in the tree. Written only from the panel's own doings — a click, a key, a
+  // render the person caused — never from the watchers or the timer: a copy asleep
+  // in another space must not write its stale view into the space the person is in.
+  // The reply field's words are left out on purpose: they change every keystroke,
+  // and `setShared` re-renders every mod each time.
+  saveState() {
+    if (this.mode !== "panel") return;
+    const st = {
+      thread: this.opened?.id ?? null,
+      showAll: Boolean(this.showAll),
+      cursor: this.cursor,
+      tree: [...this.open],
+    };
+    const v = JSON.stringify(st);
+    if (v === this.stateJson) return;
+    this.stateJson = v;
+    setShared(STATE, st);
+  }
+
+  // The other half, at the top of every panel render: what tab-host hands back for
+  // the space now showing. A value that differs from the last one this copy wrote
+  // or took is another space's record (or this space's own, back after a hot
+  // reload), and is adopted — the record is the whole of the view, so adopting it
+  // is enough. A thread is restored as the stub `openThread` starts from and read
+  // again from there; the reply field, which cannot be made in a render, is made by
+  // the task that reads the thread. Restored folders whose children were never read
+  // in this copy's life are read here, the way opening their row would.
+  syncState(cx) {
+    const v = JSON.stringify(shared(STATE) ?? null);
+    if (v === this.stateJson) return;
+    this.stateJson = v;
+    const st = shared(STATE) ?? {};
+    const id = typeof st.thread === "string" && st.thread ? st.thread : null;
+    if (id && id !== this.opened?.id) {
+      this.opened = { id, thread: null, error: null };
+      this.reply = null;
+      this.writing = false;
+      this.showAll = Boolean(st.showAll);
+      this.loadThread(cx);
+    } else if (!id && this.opened) {
+      this.opened = null;
+      this.reply = null;
+      this.writing = false;
+      this.forgetFields();
+    } else {
+      this.showAll = Boolean(st.showAll);
+    }
+    this.cursor = Number.isInteger(st.cursor) && st.cursor >= 0 ? st.cursor : 0;
+    this.open = new Set((Array.isArray(st.tree) ? st.tree : []).filter((p) => typeof p === "string"));
+    // A carried record can arrive before the copy has looked at the space it now
+    // shows: read the folder and the list as `reload` would, so the tree and the
+    // dots are this space's at once, and the carried folders survive the change of
+    // folder instead of being read late and cleared by it.
+    if (folderOf(space()) !== this.folder) this.reload(cx);
+    const at = this.folder;
+    if (at) for (const p of this.open) this.load(p, cx);
   }
 
   // The thread in the Inbox page, where an answer, a pick or a picture can be made.
@@ -643,6 +724,7 @@ export default class Plannotator extends View {
       this.open.add(path);
       this.load(path, cx);
     }
+    this.saveState();
     cx.notify();
   }
 
@@ -832,7 +914,11 @@ export default class Plannotator extends View {
 
   // ---- the panel ----
 
-  renderPanel() {
+  renderPanel(cx) {
+    // What the space now showing hands back for this panel, before anything draws:
+    // this is where carried state is adopted, so the view is the arriving space's
+    // from its first frame.
+    this.syncState(cx);
     const t = theme(), at = this.folder, near = at ? at.replace(home(), "~") : null;
     const waiting = this.threads.slice(0, SHOWN), more = this.threads.length - waiting.length;
     // The chip counts what needs an answer, the one thing the dots say has to be acted on.
@@ -848,7 +934,7 @@ export default class Plannotator extends View {
     const ids = this.rowIds(), sel = (id) => ids[this.cursor] === id;
     // A click on a row that stays open (a folder) moves the keys there too, so the
     // highlight and the mouse never point at two different rows.
-    const hit = (id) => { const i = ids.indexOf(id); if (i >= 0) this.cursor = i; };
+    const hit = (id) => { const i = ids.indexOf(id); if (i >= 0) { this.cursor = i; this.saveState(); } };
     const here = (th) => {
       const root = th.project?.root;
       return Boolean(root && at && (at === root || at.startsWith(`${root}/`) || root.startsWith(`${at}/`)));
@@ -909,6 +995,7 @@ export default class Plannotator extends View {
         else if (e.key === "enter") this.runRow(ids[this.cursor], cx);
         else if (e.key === "escape") { if (!this.close() && !this.back(cx)) return; }
         else return;
+        this.saveState();
         cx.stop_propagation();
         cx.notify();
       })
@@ -1416,7 +1503,7 @@ export default class Plannotator extends View {
         .when(earlier.length > 0, (el) => el.child(h_flex().id("pl-earlier").mx(12).mb(3).h(24).flex_none()
           .px(8).gap(7).items_center().rounded(6)
           .hover((st) => st.bg(t.hover)).cursor_pointer()
-          .on_click((_e, cx) => { this.showAll = true; cx.notify(); })
+          .on_click((_e, cx) => { this.showAll = true; this.saveState(); cx.notify(); })
           .child(div().text_size(11).text_color(t.accent)
             .child(earlier.length === 1 ? "1 earlier message" : `${earlier.length} earlier messages`))))
         .children(messages.slice(cut).map((m) => this.renderMessage(m)))
@@ -1503,9 +1590,9 @@ export default class Plannotator extends View {
           .child(div().flex_1().min_w(0).truncate().child(it.label))));
   }
 
-  render() {
+  render(cx) {
     if (this.mode === "palette") return this.renderPalette();
     if (this.mode === "menu") return this.renderMenu();
-    return this.renderPanel();
+    return this.renderPanel(cx);
   }
 }
