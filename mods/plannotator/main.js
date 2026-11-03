@@ -1005,7 +1005,7 @@ export default class Plannotator extends View {
         for (const slot of ["other", "note", "text"]) {
           if (!String(a[slot] ?? "").trim()) continue;
           if (this.fields.has(this.fieldId(msg, q, slot))) continue;
-          this.field(msg, q, slot, cx);
+          this.answerField(msg, q, slot, cx);
         }
       }
     }
@@ -1036,8 +1036,11 @@ export default class Plannotator extends View {
   }
 
   // The field behind an "Other", a note or a written answer. Made here — from a click or
-  // from a task, never from a render — and seeded with what the Inbox already holds.
-  field(m, q, slot, cx) {
+  // from a task, never from a render — and seeded with what the Inbox already holds. It is
+  // `answerField` and not `field` because the reply box's own `field(cx)` was here first: two
+  // methods of one name is not an overload in a class, it is the second one winning, and that
+  // took the reply box off the page for a while.
+  answerField(m, q, slot, cx) {
     const id = this.fieldId(m, q, slot);
     let state = this.fields.get(id);
     if (state) return state;
@@ -1068,7 +1071,7 @@ export default class Plannotator extends View {
     }
     return h_flex().id(`pl-qf-${this.fieldId(m, q, slot)}`).h(20).flex_none().gap(5).items_center()
       .rounded(4).cursor_pointer().hover((s) => s.bg(t.hover))
-      .on_click((_e, cx) => { this.field(m, q, slot, cx); cx.notify(); })
+      .on_click((_e, cx) => { this.answerField(m, q, slot, cx); cx.notify(); })
       .child(svg(`${ICONS}/plus.svg`).size(11).flex_none().text_color(t.dim))
       .child(div().text_size(11).text_color(t.dim).child(label));
   }
