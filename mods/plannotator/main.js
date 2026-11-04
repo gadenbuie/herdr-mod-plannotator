@@ -290,10 +290,11 @@ function wordsOf(body) {
 
 // A message's question blocks, taken out of its words: each one is drawn as a card from
 // the `questions` the Inbox parsed beside the body, so the same words twice would be one
-// too many. Only `:::question` comes off — an `:::action` block has no card here, and its
+// too many. Every question fence comes off — `:::question`, `:::question-multi` and
+// `:::question-text` — an `:::action` block has no card here, and its
 // words are still the only place the person can read it.
 function wordsWithoutQuestions(body) {
-  return String(body ?? "").replace(/^:::question\n[\s\S]*?^:::$/gm, "").replace(/\n{3,}/g, "\n\n").trim();
+  return String(body ?? "").replace(/^:::question(?:-multi|-text)?\n[\s\S]*?^:::$/gm, "").replace(/\n{3,}/g, "\n\n").trim();
 }
 
 // A subsequence score, the way a palette reads; null when q isn't there at all.
@@ -1257,17 +1258,21 @@ export default class Plannotator extends View {
     return (msg?.questions ?? []).find((x) => x?.key === q?.key) ?? null;
   }
 
-  // A ring: one choice for a single-choice question, and clicking the chosen one again
-  // clears it, which is the only way back to "not answered" from here.
+  // A multi question keeps every ring the person has set: a click adds a choice to the
+  // picked set or takes it back off, where a single one swaps it for the last click.
   toggleChoice(m, q, label, cx) {
     if (!label) return;
     const p = this.pickedFor(m, q);
     p.dirty = true;
-    p.selected = p.selected.includes(label) ? [] : [label];
-    // Their own option and one of the question's are alternatives, not both: "Other" is an
-    // answer in its own right, which is how the page reads it back ("Other: …"). The field
-    // is emptied with it, because text left in it would be a second answer again.
-    if (p.selected.length > 0) {
+    p.selected = q?.kind === "multi"
+      ? (p.selected.includes(label) ? p.selected.filter((x) => x !== label) : [...p.selected, label])
+      : (p.selected.includes(label) ? [] : [label]);
+    // Their own option and one of the question's are alternatives, not both, on a single
+    // question: "Other" is an answer in its own right, which is how the page reads it back
+    // ("Other: …"). The field is emptied with it, because text left in it would be a second
+    // answer again. On a multi one the two can stand together — the choices are ticks, and
+    // the option is one more of them.
+    if (p.selected.length > 0 && q?.kind !== "multi") {
       p.other = "";
       this.fields.get(this.fieldId(m, q, "other"))?.set_value("");
     }
@@ -1283,7 +1288,9 @@ export default class Plannotator extends View {
     if (p[slot] === value) return;
     p.dirty = true;
     p[slot] = value;
-    if (slot === "other" && value.trim()) p.selected = [];
+    // On a single question an own option is the answer, and the rings step down for it;
+    // on a multi one the two stand together. A written answer is the whole answer either way.
+    if (slot === "other" && value.trim() && q?.kind !== "multi") p.selected = [];
     if (slot === "text") p.selected = [];
     cx?.notify();
     this.savePick(m, q, cx);
@@ -1333,7 +1340,10 @@ export default class Plannotator extends View {
       : picked ? t.accent
       : t.working;
     const p = this.pickedFor(m, q);
-    const selected = new Set(q?.kind === "single" ? p.selected : (q?.answer?.selected ?? []));
+    // The rings come from `picked` — seeded from the record, re-seeded when its revision
+    // moves — for a single and a multi alike, so a click fills a ring before the Inbox has
+    // answered and a pick made in the browser shows up here without either side guessing.
+    const selected = new Set(p.selected);
     // `context` carries the "Context:" label and a "Holds up:" line the Inbox appends from
     // its own field; the label goes (the card is the context) and the line is drawn under
     // the choices with its words, so neither reads as part of the sentence.
@@ -1357,12 +1367,13 @@ export default class Plannotator extends View {
     const recommendedTag = (past) => div().flex_none().px(5).py(1).rounded(99).bg(t.selected)
       .child(div().text_size(9.5).text_color(past ? t.dim : t.accent).child("Recommended"));
     // A choice of the question's own. Clicking one is a pick; on a card that is frozen it is
-    // a picture of what was picked, and clicking does nothing.
+    // a picture of what was picked, and clicking does nothing. A multi question's rings are
+    // ticks — each one clicks on its own, none of them clears another.
     const choice = (c, n) => {
       const on = selected.has(c?.label), past = frozen && !on;
       return h_flex().id(`pl-qc-${m?.id}-${q?.key}-${n}`).w_full().flex_none().px(4).py(2)
         .gap(7).items_start().rounded(5)
-        .when(!frozen && q?.kind === "single", (el) => el.cursor_pointer().hover((s) => s.bg(t.hover))
+        .when(!frozen && (q?.kind === "single" || q?.kind === "multi"), (el) => el.cursor_pointer().hover((s) => s.bg(t.hover))
           .on_click((_e, cx) => this.toggleChoice(m, q, c?.label, cx)))
         .child(ring(on, past))
         .child(v_flex().flex_1().min_w(0).gap(1)
@@ -1389,13 +1400,15 @@ export default class Plannotator extends View {
         // The person's own option, when the question is theirs to answer: a field, always
         // offered, whatever choices the agent wrote — the Inbox takes `other` on every
         // question. Once it is in the record it is drawn as one more choice, so a card that
-        // has been answered looks answered.
-        .when(editable && q?.kind === "single" && !(this.fields.has(this.fieldId(m, q, "other"))),
+        // has been answered looks answered. On a multi one it stands beside the ticks, so
+        // its ring is on whenever it holds words; on a single one it is the pick, and its
+        // ring is on only while nothing else is.
+        .when(editable && q?.kind !== "text" && !(this.fields.has(this.fieldId(m, q, "other"))),
           (el) => el.when(Boolean(other), (s) => s.child(h_flex().w_full().flex_none().px(4).py(2)
             .gap(7).items_start()
-            .child(ring(p.selected.length === 0, false))
+            .child(ring(q?.kind === "multi" ? true : p.selected.length === 0, false))
             .child(label(other, false)))))
-        .when(editable && q?.kind === "single", (el) => el.child(this.fieldRow(m, q, "other", "Add your own option")))
+        .when(editable && q?.kind !== "text", (el) => el.child(this.fieldRow(m, q, "other", "Add your own option")))
         // A written question is answered in a field of its own: `text` is the answer, and a
         // note beside it is not the same thing.
         .when(editable && q?.kind === "text", (el) => el.child(this.fieldRow(m, q, "text", "Write your answer")))

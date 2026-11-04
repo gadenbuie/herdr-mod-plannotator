@@ -263,6 +263,10 @@ the tree — sticks to its space and comes back with it.
   frame at the bottom of every thread read as clutter; the band runs the
   panel's full width on `popover`, and the rule over it (not a border on
   it) says the caret is there.
+- **A question fence is not always `:::question`.** The Inbox also writes
+  `:::question-multi` and `:::question-text`, so `wordsWithoutQuestions`
+  matches all three — one that matched the bare fence only drew the whole
+  block twice: as plain markdown above the card, and as the card.
 
 ## Done when
 
