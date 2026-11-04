@@ -71,7 +71,9 @@ the tree — sticks to its space and comes back with it.
   `tab-host.toggle:plannotator`, the same handler the click runs, on a
   copy that lives in the tab bar and never sleeps.
   `layout.toggle:panel` would land on whatever tab the panel was last on —
-  that is why the key is not it.
+  that is why the key is not it. (Without tab-host, `install.sh` docks
+  the panel on the right and binds the key to that plain toggle anyway:
+  better a panel that lands on its last tab than no panel.)
 - **The tab keeps the mod alive, and that is what the toast needed.** Herdr
   keeps a block's copy running once it has shown, hidden or not, so after
   one press of the button in a session the sessions folder stays watched
@@ -175,14 +177,18 @@ the tree — sticks to its space and comes back with it.
 }
 ```
 
-  `place: "none"` keeps Herdr from docking a copy (with tab-host
-  installed, that would be a second panel). `focusable` lets the panel
-  take the keyboard when it is clicked into. `tab` is `tab-host`'s field,
-  not Herdr's — Herdr ignores unknown keys, so the declaration is inert
-  without that mod: `badge` names the shared key the waiting count is
-  published on, `state` the key the panel's view is carried in from space
-  to space, `show` keeps the button out of machines without `plannotator`
-  on `PATH`, and `order` puts it at the right end of the contributors.
+  `place: "none"` is what the repo ships: with tab-host installed, a
+  dockable place would be a second panel. `install.sh` rewrites the
+  installed copy to `"right"` when tab-host is missing — the panel docks
+  as a normal side panel, which is what makes tab-host optional — and
+  binds `cmd-alt-i` to `layout.toggle:panel` for as long as that mode
+  lasts. `focusable` lets the panel take the keyboard when it is
+  clicked into. `tab` is `tab-host`'s field, not Herdr's — Herdr ignores
+  unknown keys, so the declaration is inert without that mod: `badge`
+  names the shared key the waiting count is published on, `state` the
+  key the panel's view is carried in from space to space, `show` keeps
+  the button out of machines without `plannotator` on `PATH`, and
+  `order` puts it at the right end of the contributors.
 - `mods/plannotator/icon.svg` — the button's glyph, `stroke="currentColor"`
   and `fill="none"` so `tab-host` tints it with the button's text colour.
 - `keys.json` — six `global` bindings (see the README). Merge into the
@@ -217,14 +223,14 @@ the tree — sticks to its space and comes back with it.
 - **Two methods of one name on a class is the second one winning
   silently** — not overloads. `field(cx)` and `answerField(...)` are two
   names because of it.
-- **`place` must stay `"none"`, and without `tab-host` nothing of this mod
-  appears on its own.** The shipped tab bar (`tabs`) hardcodes Files and
-  Changes; the button is `tab-host`'s, drawn from this manifest, and the
-  panel's tab is `tab-host`'s block in the side panel's stack. No
-  `tab-host`, no button and no panel — only a layout block
-  (`{"type": "block", "content": {"mod": "plannotator"}}`) shows the card
-  by hand. With `tab-host` installed, a dockable place would dock a second
-  copy.
+- **`place` is `"none"` in the repo and `"right"` in a docked install, and
+  the two must not meet.** The repo ships `"none"` because with tab-host
+  installed a dockable place gives the panel two copies. `install.sh`
+  swaps the installed copy's place and its own `cmd-alt-i` binding with
+  the mode — tab-host there or not — and only ever touches the two
+  bindings it may itself have written. Without tab-host there is no
+  button; the docked copy is the panel. A block tab-host left in a
+  layout keeps drawing after tab-host is gone.
 - **There is no web view in Herdr**, and the app's own palette cannot be
   extended (`mod.open` is hidden from it) — so the page opens in the
   browser, and the palette here is the mod's own popup, under its own
@@ -284,6 +290,10 @@ the tree — sticks to its space and comes back with it.
   caret is in it; two shown copies make one press one run.
 - Two spaces keep their own thread and open folders, and each comes back
   with its highlight where it was left.
+- With tab-host missing, `install.sh` docks the panel (`place: "right"`)
+  and binds `cmd-alt-i` to `layout.toggle:panel`; with tab-host present
+  it does neither, reruns swap the two modes, and a person's own
+  `cmd-alt-i` binding is kept whatever it is.
 
 - The preview above is a drawing, not a photograph: a poster of the mod
   in the app's own chrome — wordmark, the headline "Plannotator, one tab

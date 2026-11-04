@@ -38,17 +38,24 @@ cd herdr-mod-plannotator
 
 `install.sh` copies the mod into `~/.config/herdr-app/mods/`, adds the key
 bindings you don't already have (replacing nothing, with a backup beside
-your `keys.json`), and runs `herdr-app check`.
+your `keys.json`), and runs `herdr-app check`. Without tab-host it also
+docks the panel on the right; with tab-host the manifest ships as-is
+(`place: "none"`) and the panel lives on the tab bar's tab. Or skip the
+script entirely: your agent can copy `mods/plannotator/` into
+`~/.config/herdr-app/mods/`, add its block
+(`{"type": "block", "content": {"mod": "plannotator"}}`) to a layout you
+own, and merge the keys — the same panel either way.
 
 The button needs [herdr-mod-tab-host](https://github.com/gadenbuie/herdr-mod-tab-host)
 installed — it draws one button per mod that declares a tab, and the
-panel's tab in the side panel is its block. Without tab-host nothing of
-this mod appears on its own: no button and no panel, because
-`place: "none"` keeps Herdr from docking a copy. The panel can still be
-added by hand to a layout you own
-(`{"type": "block", "content": {"mod": "plannotator"}}`), where it draws
-the same card with no button and no badge — but as shipped, tab-host is
-required.
+panel's tab in the side panel is its block: the button in the tab bar,
+the badge while the panel is closed, and the view that follows you from
+space to space are all its. tab-host is optional, though: without it
+`install.sh` installs the same panel as a normal Herdr side panel
+(`place: "right"`) — no button, no badge, no per-space carry — and
+binds `cmd-alt-i` to the plain `layout.toggle:panel` instead of the
+button's own toggle. Rerun `./install.sh` after installing or removing
+tab-host and the two modes swap.
 
 The panel talks to Plannotator's own Inbox server on `127.0.0.1` — the
 same requests its page opens with — and needs the `plannotator` CLI on
@@ -92,7 +99,7 @@ into, so it never steals the keys from the terminal that opened it.
 
 | Key (macOS) | Does |
 | ----------- | ---- |
-| `cmd-alt-i` | Show the panel on its tab, or hide it — the button's own behaviour (`tab-host.toggle:plannotator`). |
+| `cmd-alt-i` | Show the panel on its tab, or hide it — the button's own behaviour (`tab-host.toggle:plannotator`). Without tab-host: `layout.toggle:panel`, the plain panel toggle. |
 | `cmd-alt-shift-p` | The mod's own palette: annotate, review, open the Inbox. |
 | `cmd-alt-l` | Annotate the last message. |
 | `cmd-alt-r` | Review my changes. |

@@ -23,9 +23,10 @@ the code.
   README's table.
 - `keys.json` — the six `global` bindings this mod expects, merged into
   the person's `keys.json`, never replacing theirs.
-- `install.sh` — the delivery: copy the mod, merge the keys, check.
-  Herdr (0.1.12) doesn't run mods behind a symlinked folder; install is a
-  copy.
+- `install.sh` — the delivery: copy the mod, merge the keys, check; and
+  dock the panel as a normal side panel when tab-host is missing
+  (`place: "right"`, `cmd-alt-i` on the plain panel toggle). Herdr
+  (0.1.12) doesn't run mods behind a symlinked folder; install is a copy.
 - `RECIPE.md`, `preview.png` — the recipe and its picture; a shared mod
   ships `mods/<name>/` (and its keys), nothing else — never a `layouts/`
   folder.
