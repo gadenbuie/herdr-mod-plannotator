@@ -11,9 +11,10 @@
 # 3. Runs herdr-app check on the mod, which fails loudly on a broken copy.
 #
 # The button in the tab bar is tab-host's: install herdr-mod-tab-host
-# first (github.com/gadenbuie/herdr-mod-tab-host). Without it the panel
-# still runs — open it as a tab of a space through the app palette's
-# "Go to space or tab…" — but it has no button and no badge.
+# first (github.com/gadenbuie/herdr-mod-tab-host). Without it nothing of
+# this mod appears on its own — no button and no panel (place: "none"
+# keeps Herdr from docking a copy); only a layout block added by hand
+# shows the card.
 #
 # The panel needs the `plannotator` CLI on PATH (plannotator.ai); the
 # button appears only where `command -v plannotator` answers (tab.show).
