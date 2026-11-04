@@ -33,7 +33,7 @@ you do.
 ```sh
 git clone https://github.com/gadenbuie/herdr-mod-plannotator.git
 cd herdr-mod-plannotator
-./install.sh
+make install   # runs ./install.sh
 ```
 
 `install.sh` copies the mod into `~/.config/herdr-app/mods/`, adds the key
