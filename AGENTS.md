@@ -7,8 +7,9 @@ contract for agents who change it; `~/.config/herdr-app/AGENTS.md` —
 rewritten by the app on every start — is the contract for Herdr mods in
 general, and `herdr.d.ts` / `gpui-kit.d.ts` beside it are the truth about
 the APIs. Read those first; this file only adds what is specific to this
-mod. `RECIPE.md` is the brief another agent builds the whole thing from —
-keep it true while you change the code, and never trust it over the code.
+mod. `RECIPE.md` is the recipe — the decisions and the architecture, kept
+short — keep it true while you change the code, and never trust it over
+the code.
 
 ## The shape
 

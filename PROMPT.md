@@ -14,6 +14,7 @@ say so if either is missing rather than working around it.
 
 The panel's button comes from [tab-host](https://github.com/gadenbuie/herdr-mod-tab-host)
 and its content comes from [Plannotator](https://plannotator.ai); both must
-be installed for the button to appear and mean something. Without tab-host
-the agent can still open the panel as a tab of a space through the app
-palette's "Go to space or tab…" — mention that if you want it checked too.
+be installed — without tab-host nothing of this mod appears on its own
+(`place: "none"` keeps Herdr from docking the panel, so there is no button
+to click and no panel). Say so if either is missing rather than working
+around it.

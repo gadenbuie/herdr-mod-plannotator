@@ -25,8 +25,8 @@ you do.
 
 - `mods/plannotator/` — the panel, its palette, and a row's menu: one mod.
 - `install.sh` — installs it: copy the mod, merge the keys, `herdr-app check`.
-- `RECIPE.md` — the brief to build it from scratch: what you see, how it
-  behaves, and every trap the build found.
+- `RECIPE.md` — the recipe in Herdr's six parts: what you see, how it
+  behaves, what it is built from, and the traps that cost the build.
 
 ## Install
 
@@ -41,9 +41,14 @@ bindings you don't already have (replacing nothing, with a backup beside
 your `keys.json`), and runs `herdr-app check`.
 
 The button needs [herdr-mod-tab-host](https://github.com/gadenbuie/herdr-mod-tab-host)
-installed — it draws one button per mod that declares a tab. Without it the
-panel still runs, as a tab of a space through the app palette's "Go to
-space or tab…", with no button and no badge.
+installed — it draws one button per mod that declares a tab, and the
+panel's tab in the side panel is its block. Without tab-host nothing of
+this mod appears on its own: no button and no panel, because
+`place: "none"` keeps Herdr from docking a copy. The panel can still be
+added by hand to a layout you own
+(`{"type": "block", "content": {"mod": "plannotator"}}`), where it draws
+the same card with no button and no badge — but as shipped, tab-host is
+required.
 
 The panel talks to Plannotator's own Inbox server on `127.0.0.1` — the
 same requests its page opens with — and needs the `plannotator` CLI on

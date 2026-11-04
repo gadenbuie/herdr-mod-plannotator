@@ -1,63 +1,163 @@
 # Plannotator
 
-A Plannotator panel in the tab bar: a Plannotator button beside Files and Changes opens a tab in the side panel that says what is in the Plannotator Inbox — the questions, summaries and reviews agents left for the person — with a dot on each thread for what it needs (yellow asks something, blue is new since the person last looked, grey is read), opens any of them to read its messages in the panel, answer its questions without leaving it, and reply in words, and starts Plannotator's own sessions (`last`, `review`, `annotate`) in the background, in the folder the person is working in. Under the threads it carries the annotate list: the last message, the review, the space's own folder ("This space", which annotates all of it), a file tree for picking one file or folder, and another folder from a picker. The palette key opens the same mod as a small command palette with its six commands, and a right-click on a tree row offers to annotate that file, its folder, or all of the space's files. Herdr cannot draw a web page, so the page itself always opens in the browser: the session runs detached, prints its address, and ends when the person decides. Being a tab in the side panel is the point of it: once the button has opened it, the copy keeps running while the panel is hidden, so a decision lands in Herdr's own toast the second it happens instead of waiting for the panel to be opened again. And the view — the thread on screen, the folders open in the tree — sticks to its space, carried back when the person comes back to it.
+A Plannotator button beside Files and Changes opens a tab in the side
+panel that says what is in the Plannotator Inbox — the questions, summaries
+and reviews agents left for the person. Each thread carries a dot for what
+it needs (yellow asks something, blue is new since the person looked, grey
+is read); any thread opens to read its messages in the panel, answer its
+questions by clicking their choices, and reply in words. Under the threads
+sits the annotate list: the last message, the review, the space's folder, a
+file tree for picking one file or folder, and another folder from a picker —
+each starts a background `plannotator` session in the folder being worked
+in. A decision made in a Plannotator session lands as a Herdr toast the
+second it happens, panel open or not, because the panel's tab keeps running
+while it is hidden. The view — the thread on screen, the folders open in
+the tree — sticks to its space and comes back with it.
 
 ![Plannotator](preview.png)
 
 ## What you see
 
-The panel is a card of its own in the side panel — 368 px wide in the person's layout, the width Files and Changes get — rounded 10, `background` fill, 1 px `border`, at 13 px in `foreground`, its content column at most 760 px wide and centred. Nothing floats: the tab bar's button and the panel column are the only chrome.
-
-**Header**, 42 px tall, 14 px side padding, a 1 px bottom border:
-
-- "Plannotator", 13 px semibold, then a count chip only when something waits: 10.5 px text on `accent` with `accent_foreground`, 6 px side padding, fully rounded. The chip is how many threads have an unanswered question, not how many rows are shown.
-- Two 24 px icon buttons on the right: a magnifier (`search.svg`, opens the palette) and a page (`file-text.svg`, opens the Inbox). 14 px icons in `muted`, turning `foreground` on `hover`. There is no cross: the tab bar's button is what puts the panel away. **With a thread open** the header is the way back and the name of what is on it: a `chevron-left` button, then the thread's subject at 13 px semibold, one line, ellipsis, and the page button opens the Inbox on that thread rather than on its list.
-
-**One scroll area**, edge to edge under the header, holding both sections: the Inbox and the annotate list scroll together, and nothing is pinned to the bottom edge.
-
-1. A 24 px section label, 11 px `dim`: "Threads". Then up to **five** threads. Each row is 6 px side margin, 12 px padding, 6 px vertical padding, rounded 7, `hover` fill on hover, and two lines. Line one starts with a 7 px round **dot** - yellow (`ansi3`) when the Inbox has the thread under "Stopped on you", "Holding up work" or "Waiting on you", blue (`ansi4`) under "New since you looked", grey (`dim`) under "Sent" or "Quiet" - then the project's name at 11 px in `dim` (in `accent` when the project’s root and the space’s folder are the same, or one is inside the other), then the age ("now", "3m", "2h", "3d", "2w") at the right in 11 px `dim`. Line two is the subject at 13 px `muted`, one line, ellipsis. The rows come in that order - what wants the person, then what is new, then what is settled - newest first inside each group. When more than five exist, a 28 px "N more in the Inbox" row closes the list.
-2. A 24 px label, 11 px `dim`, 10 px above it: "Annotate". Then rows at 30 px, 14 px padding, 9 px gap, a 14 px `muted` icon and the name at 13 px `muted`, `hover` fill on hover: `square-pen` "Last message", `git-compare` "Review changes", then **`layers` "This space"** with the space's folder in `~/…` form at 11 px `dim` on its right (one line, ellipsis). All three are the same kind of row: "This space" is a peer of the two above it, not a heading, and its click annotates the whole space folder.
-3. Under "This space", indented one step: a 26 px row (6 px side margin, 20 px left padding, 8 px right, 6 px gap, rounded 6) with a 12 px `chevron-right` (or `chevron-down` when open), a 13 px `files.svg`, and "Files · 5" at 13 px `muted` when closed, plain "Files" when open. The number is how many entries the space folder has (a `…` until the read lands).
-4. The tree, when that row is open: 24 px rows, 6 px side margin, 8 px right padding, 6 px gap, rounded 6, `hover` fill. Each row is indented 12 px further than its parent (up to 8 steps), then a 12 px chevron for a folder, a 13 px `folder.svg` or `file-text.svg` in `muted`, and the name at 13 px, one line, ellipsis. Folders come first, then files, each alphabetically. A folder's row carries an 18×18 pen button (`square-pen.svg`, 12 px, `dim`) at its right edge; files carry nothing, since their row is the action.
-5. Last, a 30 px "Another folder…" row with `folder-plus`, styled like the rows under "Annotate".
-
-**The row the keys are on** is filled `selected`, and the annotate and thread-action rows turn their labels `foreground` with it; a thread row's subject stays `muted`. It starts on the top row — the thread that most needs the person, or "Last message" when the Inbox is empty.
-
-**A thread, opened**, replaces the whole scroll area: the list and the annotate rows are one page, the thread is the next. The page is three rows, and only the middle one scrolls - a project name that scrolled away would leave the person reading messages with no idea whose thread it is, and a field that scrolled away would have to be found before every reply. Pinned at the top, a 26 px line with a 1 px `border` rule under it, at 11 px `dim`: the project's name and the thread's age, `herdr-mod-plannotator · 26m`. Pinned at the bottom, the reply band and, under it, the 30 px row “Open in Inbox for picks and pictures” — flush with the card’s own bottom edge, no padding under it, because the row is the page's last thing and a gap there read as a fifth block that was not there. Between them, `overflow_y_scrollbar` on that box alone, 4 px of top and bottom padding. Then each message, in order, 6 px side margin, 12 px padding, 7 px vertical padding, rounded 8, 3 px gap, and its words at 14 px with `line_height(1.6)` - one step up from the panel's 13 px, and airier than the markdown default, because an answer is what the page is for. `line_height` takes a bare number as a multiple of the size, not pixels: `1.6` is right, `21` is twenty-one times the text and reads as a page of blank lines. Inside that: a line with the author at 11 px semibold - "You" in `accent` for the person's own, the agent’s name in `muted` for its — and its age at 11 px `dim`; then the message's words rendered as markdown by `TextView`, so lists, tables, `code` and fences draw as the agent wrote them. The person's own messages are boxed and the agent's are not - `popover` behind them, a 2 px `accent` rule down the left edge, the rule's width taken out of the left padding so every message's words stay in one column, the box's left corners square (`rounded_tl(0)`, `rounded_bl(0)`) so the rule is a straight edge rather than a curve bending away from the words, the right corners rounded 8, and their author line, "You", in that same `accent`. That is what makes a long thread read as a conversation instead of a wall, and it is the only thing on the page that is boxed. Not `surface`: in this app's palette `surface` resolves to `#17191d`, the same colour as `background`, so a first pass drew the person's messages on nothing at all - `theme()` reports the resolved tokens, and that is worth reading before trusting a token's name. Then the message's questions, if it asked any, as cards: 8 px rounded, 1 px `border`, on `popover` so a card is a thing on the message rather than part of it, and inside it a header (a 7 px dot in the state's colour, the question's `prompt` at 12 px semibold, and the state at 10.5 px in that same colour — “Waiting on you” in `working` yellow, “Picked, not sent” in `accent`, “Answered” in `done` blue, “Set aside” and “Replaced” in `dim`), then the body: its `context` at 12 px `muted` (the "Context:" label off, the "Holds up:" line out of it and drawn under the choices instead), each choice as an 11 px ring and a 12 px label over an 11 px `dim` description, the recommendation on the choice it names — a “Recommended” chip after that choice’s label, `selected` fill, 9.5 px `accent` text — and a line of its own only for a recommendation that names no choice on the card, then the `Holds up:` line, and — on every question that is not something to do outside the thread, settled cards included — a `square-pen` “Answer in the Inbox” row in `accent`. An open card is answerable in the panel: its rings are clickable (one choice, and clicking the chosen one again clears it), and under them a plus row “Add your own option” and a plus row “Add a note” open a field each. A written question’s “Write your answer” row opens a `Textarea` of its own, and “Add a note” is offered on every answerable question. A saved answer comes back in those fields rather than behind the link, and their own option, once in the record, is drawn as one more choice with the ring filled. An answered card fills the chosen ring in `accent`, keeps the chosen label in the foreground and dims the rest, which is what makes a settled question look settled. What the Send is carrying besides the words is said under the reply’s band: “1 answer goes with this reply”. A written question shows a “Write your answer” row where the choices would be, and a question that is something to do outside the thread says so in `dim` — “Something to do outside this thread” where the choices would be, its card reading “Not answerable here”. A message whose body had pictures says so under its words, and says it as a link: an 18 px row, `rounded(4)`, a `file-text` at 11 px and the count at 11 px both in `accent` - "2 pictures — open them in the Inbox" - hover filling with `hover`, a click opening this thread's page, the same place the bottom row goes. It is the same icon that row wears, so "this opens the Inbox" reads the same in both places. Under the last message comes the reply, and the field is the band rather than a box inside one: it runs the panel’s full width on `popover` — the token one step up from the page, the same one the person’s own messages are boxed in — with a rule on top (1 px, `border`) that turns `accent` while the caret is in it, 10 px sides and 8 px above and below, the field itself (2 rows, growing to 8 as the words wrap) at the left and, at its right, a 26 px “Send” — `solid` with `solid_foreground` once there is something to send, `raised` with `dim` text while there is not and while a send is out (“Sending…”). Something to send is words or an answer picked in a card, so a reply of picks alone goes; under the band, in `accent`, it says which — “1 answer goes with this reply”. A refused send says why in `blocked` at 11.5 px under the band, in the Inbox’s own sentence rather than its code: `thread_moved_on` reads “The agent wrote again after you read this thread; your reply was not sent. Read it again, then reply.” — and the thread is read again as the sentence is drawn, so the “read it again” is already done. While the thread is still being read the band is not drawn at all: a Send with no messages behind it has nothing to answer. Then the 30 px row that is left for the page, `file-text` “Open in Inbox for picks and pictures”. ↑/↓ move between that row and the way back, Return runs the one it is on, and Esc goes back to the list - the thread page is a page, not an overlay, so nothing is closed. While the caret is in the field every key but Esc is the field's.
-
-An Inbox with nothing in it shows "No threads yet" (or "Reading the Inbox…" before the first read) at 13 px `muted` with "Agents leave questions and summaries in the Inbox." under it at 11.5 px `dim`; a read that fails adds its one-line error there in `blocked`.
-
-**The palette** opens as a 520×340 popup at the pointer (it is `openOverlay` with no `at`), on `popover`, 10 px padding, 8 px gap, 12.8 px text: a 36 px search line (rounded 9, 1 px `accent` border, `background` fill, a 16 px magnifier, placeholder "Annotate, review, open the Inbox…", "Esc" at 11 px `dim` on the right) over six 34 px rows — "Annotate the last message", "Review my changes", "Annotate all files", "Annotate another folder…", "Open the Inbox", "Open Plannotator as a tab" — each with a 14 px icon, its title, and on the right the folder (`~/…`, 11 px `dim`) or the key `keys.json` binds to it — "Annotate another folder…" and "Open Plannotator as a tab" bind neither, so their right side is blank. The row under the pointer or the arrow keys is filled `selected`.
-
-**A tree row's menu** is a popup as wide as 300 px and as tall as its items: the path in `~/…` form at 11 px `dim`, then 31 px rows, 8 px padding, rounded 7, 14 px icons, 12.8 px labels — "Annotate this file" (or "this folder"), "Annotate all files" (only when the row is not the space folder itself), "Review changes here".
-
-**The tab bar's Plannotator button** is the only door. A pill at the right end of the tab bar, beside Files and Changes: a 14 px page-with-a-check glyph, the label at 12 px, 26 px tall, 8 px side padding, filled `selected` and `foreground` while its tab shows, `hover` fill otherwise, and a truncated label past 120 px. Clicking it shows the side panel on the Plannotator tab; clicking it again hides the panel. `cmd-alt-i` does the same from the keyboard — `tab-host.toggle:plannotator`, the same handler the click runs, which is reachable because that copy lives in the tab bar and never sleeps.
+- The panel is a card in the side panel (368 px in the person's layout,
+  Files and Changes' width), 13 px text in `foreground`, its content
+  column capped at 760 px and centred; everything scrolls together and
+  nothing floats but the palette and a row's menu.
+- **Header**: "Plannotator", a count chip for how many threads wait on the
+  person, a magnifier button (the palette) and a page button (the Inbox).
+  There is no cross — the tab bar's button is what puts the panel away.
+  With a thread open, the header is a back chevron and the thread's
+  subject, and the page button opens the Inbox on that thread.
+- **Threads**: up to five rows, each two lines — a 7 px dot in its bucket's
+  colour, the project's name (in `accent` when it is the space's own
+  project) and its age at 11 px; the subject at 13 px, one line. Yellow
+  first, then blue, then grey, newest first inside each group. More than
+  five: an "N more in the Inbox" row. An empty Inbox says "No threads yet";
+  a failed read adds its one-line error there.
+- **Annotate**: "Last message", "Review changes" and "This space" (with the
+  space's folder in `~/…` form at its right), then a "Files · N" toggle that
+  opens the space folder's tree — folders first then files, alphabetically,
+  indented a step per level, a pen button on every folder's row, a file's
+  row the action itself — and last "Another folder…".
+- **The row the keys are on** is filled `selected`; it starts on the thread
+  that most needs the person, or "Last message" when the Inbox is empty.
+- **A thread, opened**, replaces the list as a page: a pinned crumb
+  (project · age), a scrolling middle of messages — each drawn as markdown
+  with its author line, the person's own boxed with a 2 px `accent` rule
+  down the left — their questions as cards (a dot and the state in its
+  colour, ringed choices, a "Recommended" chip on the choice it names, and
+  an "Answer in the Inbox" row), the reply band pinned at the bottom (the
+  field grows 2→8 rows, Send goes live for words or a picked answer, and
+  the line under it says what the Send carries: "1 answer goes with this
+  reply"), and last an "Open in Inbox for picks and pictures" row. Pictures
+  come off the words and are counted as a link. A refused send says why in
+  the Inbox's own sentence.
+- **The palette** (520×340 at the pointer): a search line over six rows —
+  Annotate the last message, Review my changes, Annotate all files,
+  Annotate another folder…, Open the Inbox, Open Plannotator as a tab —
+  each with the key that binds it where one does. Typing filters by
+  subsequence.
+- **A tree row's menu** (right-click): annotate this file or folder,
+  annotate all files, review changes here.
+- **The tab bar's button**: a pill at the right end of the bar, a
+  page-with-a-check glyph and the label with a badge chip while the panel
+  is closed, filled `selected` while its tab shows. A click or `cmd-alt-i`
+  shows the panel on this tab; again hides it.
 
 ## How it behaves
 
-- **The tab bar's button and `cmd-alt-i` both show the panel on this tab.** The button is `tab-host`'s: it selects this mod's block in the side panel's stack and shows the panel column. The key names the same handler — `tab-host.toggle:plannotator` — because a key cannot run those two commands itself, while `tab-host`'s copy in the tab bar is always alive to receive it (see the next entry). It is a toggle and says so: `toggle:` in the binding, `toggleTab()` in that mod, and `shown` or `hidden` in its log line — one press on a panel already showing this tab puts the panel away, exactly like the button.
-- **The tab is on screen all the time, and that is what the toast needed.** `tab-host` keeps one block for this mod in the side panel's stack, and Herdr keeps a block's copy alive once it has started, shown or hidden. So after the button has been clicked once in a session, this mod is running for the rest of it: the sessions folder stays watched, and a decision becomes a Herdr toast within the second with the panel away. Only a copy nobody has shown yet is deferred — after a restart the first decision waits for the button (or the key) to be pressed once, which is the one hole left.
-- **A pick closes the popup it came from, and the panel stays.** A palette row, a menu item and the palette's own Esc are the only things that were floating: `launch()` closes that overlay first, because the browser page is where the decision happens. From the panel itself — a thread, "N more", "Last message", "Review changes", "This space", a file's row, a folder's pen, "Another folder…", the header's page button, one of the `plannotator.*` keys — nothing is closed: the panel is a tab, and the person comes back to it.
-- **The panel is one keyboard list.** ↑/↓ walk `rowIds()` — the five threads, "N more", "Last message", "Review changes", "This space", the Files toggle, every drawn tree row, "Another folder…"; in a thread, "Open in Inbox for picks and pictures" and the way back — and stop at the ends; Return runs the highlighted row (a folder opens or closes, a thread opens, everything else launches), Esc goes back out of a thread and otherwise closes what floats. The drawing and the keys read that one list, so the highlight is always the row Return runs, and a click on a folder or a thread moves the cursor there too. **The reply field is the one exception**: while the caret is in it every key but Esc belongs to the caret (`writing`, from the field's own `focus`/`blur`), because a highlight that moved on each arrow typed into a sentence, and ran a row when the person meant a new line, would be unusable.
-- **Nothing is polled from Herdr.** Spaces, focus, theme and the folder the space is in come from `spaces()`, `focused()` and `panes()` and arrive by themselves.
-- **The list is the Inbox's own, and the store is only the trigger.** `~/.plannotator/inbox/projects` is watched with `watchFolder`, so a message an agent sends shows up within a second; the rows themselves come from the Inbox server's own list model, `GET http://127.0.0.1:<port>/api/inbox/threads` (the port is in `~/.plannotator/inbox/inbox.json`), because only the Inbox keeps the read state. A thread's messages come from the same server, `GET .../threads/<id>`: its own window model, the request its page opens a thread with, which carries each message's markdown, who wrote it, when, and the seq the seen cursor needs. Those routes need no token from loopback — they are the same requests the Inbox page itself opens with. Without the server running there is nothing to show, and the panel says so.
-- **Clicking a thread reads it in the panel.** The click opens `threads/<id>` over the same loopback server and draws the messages in the panel's own width; the store is still watched, so a message that lands while a thread is open is in the panel within the second, and the thread's row — its dot, its open questions — stays as fresh as the list's. Nothing is polled from the page.
-- **Reading a thread in the panel marks it seen, not read.** Opening it POSTs `threads/<id>/seen` with the newest message's `seq` — and only when the thread's own row still says it is unseen — which is exactly what the Inbox page does when a thread is opened: the blue "new since you looked" dot goes, and the thread stays where the Inbox's own arithmetic puts it. Mark read is a different thing and is deliberately not done here — it also sets aside every open question the person leaves unanswered, so the agent is told they skipped it, and a panel that cannot show the picks has no business making that call. A thread with a question in it therefore stays yellow until it is answered or marked read in the Inbox, which is what the badge counts.
-- **An answer is words plus the answers the cards picked, and the rest is a page away on the same thread.** "Send" (or Cmd+Return in the field, where the host reports the modifier) POSTs `messages/<id>/reply` with `words`, every answer the cards have picked and not sent — `questions`, each named `{message_id, key, revision}` — an `idempotency_key` and `seen_through_seq`, the newest message drawn here. Picks alone are a reply the Inbox takes, so the button goes live for a picked answer with no words at all. The pictures, the uploads, the tags and the resolves stay in the Inbox page, which "Open in Inbox for picks and pictures" (and the header's page button, and Return on that row) opens at `#thread=<id>`, the hash route its own page routes on. That deep link goes through `plannotator inbox --background`, which prints the address without opening a browser, so `open`/`xdg-open` lands one tab on the thread the person was reading instead of on the list and a second tab beside it. Where no browser command answers, the address is a toast.
-- **The tree is read as it opens.** The space folder's own children are read once when the focused folder changes (that is where "Files · 5" gets its number); every folder under it is read the first time its row opens, and kept until the focused folder changes again. Collapsing keeps what was read; opening again shows it at once. Folders the person had open, carried back by `tab.state` on a change of space, are read the same way on arrival — the carry can land before the copy has looked at the space it now shows, and folders never read here would otherwise be lost to the change of root.
-- **A folder's row in the tree opens it, a file's row annotates it.** "This space" annotates the space folder itself, the pen on any other folder's right edge annotates that folder, and a right-click opens the menu that says it in words. An annotation starts `plannotator annotate <path>`.
-- **Every session runs in the background, with no tab and no window.** `start(args, label, folder)` runs one `sh` that backgrounds the CLI with `nohup` in the focused pane's folder and returns at once: `plannotator last|review|annotate … --json` opens the page in the browser by itself and waits there for the decision. The run's stdout and stderr go to `~/.config/herdr-app/data/plannotator/sessions/<stamp>-<label>.log` under a `__label` first line, and `__exit <code>` closes it. Nothing else speaks: the desktop banner the run used to post is gone, and the panel's own toast is the only notification. `--json` is what makes the end of the log say `{"decision": "approved" | "annotated" | "dismissed", …}` instead of prose; it changes nothing on the page.
-- **A decision is a Herdr toast the moment it lands**, because the panel's tab is alive: the copy that starts or ticks a minute reads the sessions folder for a log with `__exit` and no `__told`, posts `notify({title: "Plannotator", body: "<label>: <decision>"})` for up to three of them, and marks each — so a decision that lands with the panel hidden is a toast within the second, and a decision that lands while it is open is the same toast (the sessions folder is watched, and the minute timer is the fallback). `__told` keeps a second copy from saying it twice.
-- **Keys** arrive through `nextCommand()`: `plannotator.palette` opens the palette popup, `.last`, `.review` and `.annotate` start those sessions, `.inbox` opens the Inbox, and `focus` (a `mod.json` `"focusable": true` copy) returns the keyboard to the panel after the palette closes. A mod command reaches only a copy that is on screen, so those five keys work while the panel shows this mod's tab; the panel itself is opened by the tab bar's button or `layout.toggle:panel`, which need nothing of the mod running.
-- **In the palette**, typing filters the six rows by subsequence ("rvw" finds "Review my changes"), ↑/↓ move and stop at the ends, Enter runs (the input's `submit`), Esc closes, and a pick closes before it acts. **Menus** close on Esc or a pick.
-- The panel is not handed the keyboard when it appears (that would pull the keys out of the terminal that opened it): `track_focus` on the panel's root hands it over when it is clicked, and then ↑/↓/Return work on the same `rowIds()` list. Esc in the panel is left to the app, since there is no overlay to close. The palette focuses its own input, so the arrow keys reach it as soon as it opens.
-- Two shown copies (the panel and a tab of the same mod) both receive a key, so the mod ignores a second command within 500 ms — one press makes one run.
-- `pickFolder({prompt: "Annotate"})` is the way to a folder nobody's pane is in; it starts `plannotator annotate <folder>` in that folder.
+- **The button and `cmd-alt-i` are `tab-host`'s toggle.** Showing this tab
+  takes two layout commands (`layout.select {stack, child}`, then
+  `layout.show {id}`); a key can run only one, so the binding is
+  `tab-host.toggle:plannotator`, the same handler the click runs, on a
+  copy that lives in the tab bar and never sleeps.
+  `layout.toggle:panel` would land on whatever tab the panel was last on —
+  that is why the key is not it.
+- **The tab keeps the mod alive, and that is what the toast needed.** Herdr
+  keeps a block's copy running once it has shown, hidden or not, so after
+  one press of the button in a session the sessions folder stays watched
+  and a decision is a Herdr toast within the second. Only a copy nobody
+  has shown is deferred: after a restart, the first decision waits for one
+  press of the button.
+- **One keyboard list.** The drawing and the keys both read `rowIds()` —
+  the threads, "N more", the annotate rows, the Files toggle, every drawn
+  tree row, "Another folder…", and in a thread the last row and the way
+  back — so the highlight is always the row Return runs. The reply field
+  is the one exception: while the caret is in it, every key but Esc
+  belongs to the caret. The panel is not handed the keyboard when it
+  appears (that would pull it out of the terminal); a click into it hands
+  it over.
+- **The Inbox owns the list and the read state; the store is only the
+  trigger.** `~/.plannotator/inbox/projects` is watched (`watchFolder`) for
+  changes, and the rows come from the Inbox server's own model,
+  `GET http://127.0.0.1:<port>/api/inbox/threads` (the port in
+  `~/.plannotator/inbox/inbox.json`), which returns them already sorted
+  into its buckets — stopped/holding/waiting, new, sent/quiet — folded here
+  into yellow, blue and grey. A message an agent sends is a row within a
+  second, in the list or in the open thread. Without the server the panel
+  says so and fills itself in when it returns. Nothing is polled from
+  Herdr: spaces, focus, theme and the space's folder arrive by themselves.
+- **Reading a thread is `seen`, never `read`.** Opening it POSTs
+  `threads/<id>/seen` with the newest drawn seq — exactly what the Inbox
+  page does — so the blue dot goes and nothing else moves. The Inbox's own
+  Mark read also sets aside every open question with a skip answer; that
+  is the person's decision, made on a page that can show the picks, never
+  a side effect of opening a thread here. A thread with an unanswered
+  question stays yellow, and the badge keeps counting it.
+- **Picks are the Inbox's drafts, saved as they are made.** A click on a
+  ring POSTs `messages/<id>/picks` — the same draft the Inbox's own page
+  keeps, so a pick here follows to the browser and back. The reply's Send
+  POSTs `messages/<id>/reply` with `words`, the picked answers named
+  `{message_id, key, revision}`, an `idempotency_key`, and
+  `seen_through_seq` — the newest seq drawn. Picks alone are a reply. If
+  the agent wrote after what was drawn, the Inbox refuses with
+  `thread_moved_on`: nothing sends, the words stay in the field, the
+  thread re-reads to show what moved it. **This is the whole write
+  surface** — a cursor, an answer's draft, a reply. No resolve, upload,
+  tag, handoff or skip leaves the panel.
+- **The rest of an answer is a page away.** "Open in Inbox for picks and
+  pictures" (and the header's page button) opens the Inbox at
+  `#thread=<id>` through `plannotator inbox --background`, which prints the
+  address without a browser, so `open` lands one tab on the thread instead
+  of two.
+- **The tree follows the focused pane.** Its root is the focused folder;
+  each folder's children are read once, when its row first opens, and
+  kept until the root changes. Collapsing keeps what was read. "This
+  space" annotates the space folder, a folder's pen annotates that folder,
+  a file's row annotates the file, and "Another folder…" opens
+  `pickFolder` and annotates what it returns.
+- **Sessions run in the background, and the log is the channel.** One `sh`
+  per run backgrounds `plannotator last|review|annotate … --json` with
+  `nohup` in the working folder; `--json` changes only the log's verdict
+  line, nothing on the page. The output lands in
+  `~/.config/herdr-app/data/plannotator/sessions/<stamp>-<label>.log`
+  under a `__label` first line with `__exit <code>` closing it; a failed
+  run (no CLI on `PATH`, say) is an exit code in the log and a toast with
+  the label and nothing after it. Nothing prunes those logs.
+- **A decision is a Herdr toast the moment it lands.** The watcher reads
+  the sessions folder for a log with `__exit` and no `__told`, posts
+  `notify()` for up to three, and marks each as it goes, so however many
+  copies read at once the toast fires once.
+- **Mod keys reach an on-screen copy only.** `plannotator.palette`,
+  `.last`, `.review`, `.annotate` and `.inbox` arrive through
+  `nextCommand()` and work while the panel's tab shows; with the panel
+  hidden Herdr toasts "unknown command" — `cmd-alt-i` is the one that
+  always works, and a palette or menu pick closes its popup before it
+  acts while nothing else ever closes anything (the panel is a tab). Two
+  shown copies both receive a key, so a second command within 500 ms is
+  ignored: one press, one run.
 
 ## Built from
 
-- `mods/plannotator/main.js` — the whole mod, one `View`, and five `sh -c` scripts beside it: `ASK` (the Inbox over its own loopback server: a method, a route under `/api/inbox/`, and the JSON a POST carries — every read, and the writes: the seen cursor, an answer's draft, a reply), `OPEN` (the Inbox on one page of it, by hash route, in a single tab), `LIST`, `RUN` and `ANNOUNCE` (the tree, and the sessions and their logs). The thread page is `TextView.markdown` per message — `gpui-base`'s own renderer — so the agents' markdown arrives as markdown instead of a wall of text. The reply field is `TextareaState` + `Textarea` (`set_auto_grow(2, 8)`), made once on the first thread and kept: state made during a render throws, and a field rebuilt per frame would lose what was typed in it. The fields behind a question's "Add your own option", "Add a note" and "Write your answer" are made the same way — from a click, or from the task that reads a thread when the Inbox already holds words for one.
-- `mods/plannotator/mod.json` — the manifest, and the whole of what the tab bar reads:
+- `mods/plannotator/main.js` — the whole mod, one `View`: no props is the
+  panel; `props().mode === "palette"` the palette; `"menu"` a tree row's
+  menu. Those two are `openOverlay` popups, closed with
+  `closeOverlay(props().overlay)` — the id is not the mod's name. The
+  thread page is `TextView.markdown` per message, so the agents' markdown
+  arrives as markdown. The reply field is a `TextareaState` with
+  `set_auto_grow(2, 8)`, made once on the first thread and kept — as are
+  the fields behind a card's saved answers.
+- `mods/plannotator/mod.json` — the manifest, the whole of the tab bar's
+  dependency:
 
 ```json
 {
@@ -75,83 +175,129 @@ An Inbox with nothing in it shows "No threads yet" (or "Reading the Inbox…" be
 }
 ```
 
-  `place: "none"` means Herdr never docks a copy of it, `focusable` is what lets the mod ask for its keyboard back, and `tab` is the manifest the tab bar reads (see the next entry), whose `show` keeps the button out of the spaces whose machine has no `plannotator` — tab-host runs the string as `sh -c` there and draws the button only on exit 0 — whose `order` puts the button at the right end of the contributors, past the ones that never asked (missing sorts as 100), and whose `state` names the shared key the panel's view is carried in, from space to space (see Watch out). There is no `overlay`: the panel is not a popup, and the palette and menus open themselves with `openOverlay`.
-- `mods/plannotator/icon.svg` — the button's 16 px glyph, a page with a check in it, `stroke="currentColor"` and `fill="none"` so `tab-host` tints it with the button's text color.
-- **The tab is a manifest, not code, and it belongs to `tab-host`.** Herdr 0.1.12's tab bar (`tabs`) hardcodes its `files` and `changes` buttons and cannot be added to, so the person runs `herdr-mod-tab-host`: it lists every installed mod whose `mod.json` declares `tab` (or `button`), draws one button per entry in the buttons block their layout carries beside the tab bar, adds `{ "id": "tabhost-plannotator", "type": "block", "content": { "mod": "plannotator" } }` to the `panel-body` stack with `layout.set`, and resizes its own block to fit the buttons it draws (109 px for this one). Nothing is imported and no layout is edited here: the declaration is the whole dependency, and the copy it makes carries no props — which is why `props()?.mode ?? "panel"` is the only discriminator the mod needs. No props is the panel, drawn as its own card; the only overlays this mod opens are its palette and a row's menu. And `tab.state` is why the panel's view follows the space: tab-host keeps one value of `plannotator.state` per space, saved under the space being left, and hands the arriving one its own back.
-- `keys.json` — six `global` bindings: `cmd-alt-i` `tab-host.toggle:plannotator` (that mod's own command: it selects this mod's block and shows the panel, or hides it when this tab is the one showing — a key cannot run those two `layout` commands itself — and its log line says which of the two it did), `cmd-alt-shift-p` palette, `cmd-alt-l` last message, `cmd-alt-r` review, `cmd-alt-a` annotate the space's folder, `cmd-alt-shift-i` open the Inbox. Merge into the person's `keys.json` rather than replacing it. **The mod's name is `tab-host`, the folder's name**, not `tabhost`: `herdr-app do tabhost.open:plannotator` is refused with `unknown command`, so a binding using it is a key that does nothing at all. The `tabhost-` prefix belongs to the block ids `tab-host` gives its contributors, not to itself.
-- Props roles: no props is the panel. `{ mode: "palette" }` is the palette, `{ mode: "menu", path, dir }` is a row's menu; those two are the only copies that float (they are `openOverlay` popups and get `props().overlay`, closed with `closeOverlay(props().overlay)`), so `close()` and `launch()` are about them, and the panel has nothing to close.
-- **The threads come back already sorted into the Inbox's buckets**, `sections[].threads[]`: "stopped", "holding", "waiting", "new", "sent", "quiet", each row with `thread_id`, `subject`, `last_at`, `project` and (for a row that is holding something) `questions`. `readThreads(stdout)` folds the six into the three dot states — the first three are `answer`, `new` is `unread`, the rest are `read` — sorts by that, then newest first, and takes each project's `root` from the payload's `projects` list (the only place it lives), which is how the row knows to turn `accent`. A payload with no `sections` throws, so a changed route shows up as an error line rather than as an empty Inbox.
-- The tree is three pieces of state on the view: `kids` (a `Map` of folder path → its entries), `open` (a `Set` of expanded paths) and `reading` (paths whose `sh` is in flight, so one folder is never read twice at once). A change of the focused folder empties `kids` and `reading` and reads the new root at once, but keeps the folders in `open` that still sit under the new root — the folders the person had open follow the root down rather than being lost to the move. `entries(stdout)` turns the NUL-separated pairs into `{dir, name}`, folders first, and `toggle(path, cx)` flips a path in `open` and loads it if it has no `kids` yet; `treeRows()` walks `kids` from the root through `open` into `{path, name, dir, depth}` rows, and both the drawing and the keys read it.
-- The panel's rows are known by id, not by index: `rowIds()` lists them in drawing order (`t0`…`t4`, `more`, `last`, `review`, `space`, `tree`, `f:<path>`…, `pick`) and `runRow(id, cx)` runs one. `this.cursor` indexes that list and the fill is `sel(id)` — `ids[this.cursor] === id` — so no offset arithmetic can fall out of step when the Inbox or the tree changes size. `launch(fn)` closes the palette or menu it was called from before running `fn`, once: `this.closed` keeps a second `closeOverlay` off.
-- Icons are the shipped ones, referenced from `~/.config/herdr-app`: `mods/workspace-chrome/{search,file-text,square-pen,git-compare,folder,folder-plus,files,layers,chevron-right,chevron-down,chevron-left,plus,panel-right}.svg`, drawn with `svg(...).size(n).text_color(...)`. The tab bar's glyph is this mod's own `mods/plannotator/icon.svg`.
-- `herdr` functions: `spaces`, `focused`, `panes`, `exec`, `run`, `theme`, `props`, `openOverlay`, `closeOverlay`, `notify`, `watchFolder`, `pickFolder`, `home`, `appHome`, `nextCommand`, `keys`, `shared`, `setShared`. Commands it runs: `tab.new` (only for "Open Plannotator as a tab"; sessions do not use it).
-- Programs: `plannotator` on the person's `PATH` — `last`, `review`, `annotate <path>`, `inbox --background` (the address, without a browser) — plus `curl` for the Inbox's own routes, `open` or `xdg-open` for the page, and `sh`.
-- Three `sh -c` helpers, because a mod has no directory or HTTP API — each with a folder as `$1` except the second:
-  - `ASK`, the Inbox asked once: `sed` pulls the port out of `inbox.json`, `curl -s -m 5` speaks to the loopback server (`$2` the method, `$3` the route, `$4` a POST's JSON), and a `printf` of `{"error":"The Inbox is not running"}` covers the refused connection so the panel has something to say.
-  - `OPEN`, the Inbox in the person's browser by hash route (`$1`): `plannotator inbox --background` prints the address, `open`/`xdg-open` lands one tab on it, and the address is what the panel toasts where no browser command answers.
-  - `LIST`, the tree: one level of one folder as `d|f` and a name, NUL-separated, at most 200 entries, `.git` skipped. Run once per folder, on demand.
-- The background runner, `RUN`, is a fourth `sh -c` script and the one place a session is started. Its arguments after the script are `$1` the log folder, `$2` the working folder, `$3` the log's name, `$4` the label, then the CLI's argv. It `mkdir -p`s the log folder, `cd`s, and backgrounds a subshell that writes `__label <label>` as the log's first line, appends `nohup "$@" >>"$log" 2>&1`, and appends `__exit $?`. Nothing else: no notifier of either kind runs, and the decision is left in the log for `ANNOUNCE` to find. `exec` resolves in ~40 ms because the subshell is backgrounded; the CLI itself outlives Herdr thanks to `nohup`.
-- The fifth `sh -c` script, `ANNOUNCE`, is the Herdr side of the same idea: it prints `<label>: <decision>` for every log that has `__exit` and no `__told`, and marks each as it goes, so the toast is posted once however many copies read at once. The mark is `__told <pid>`, appended before the print and then read back with `grep -m 1 '^__told'`: the copy whose line is the log's *first* mark prints, the others stay quiet, so two copies woken in the same instant toast once between them and neither loses the decision by arriving second. (The plain check-then-append it replaces announced five logs up to thirty times when twenty copies ran at once; this one announced exactly five in seventy-five runs.) `announce(cx)` turns those lines into `notify()` calls, three toasts at most plus a count.
-- The store's own files are still worth knowing, since the Inbox's answer is derived from them: `messages.jsonl` is append-only, one JSON record per line with `seq`, `at`, `kind`, `record.thread_id`, `record.author.kind` (`agent` or `person`), `record.subject`, `record.body`, and the read cursors `person_seen_seq` / `person_read_seq` / `person_read_at` that the Inbox stamps when the person looks; `questions.jsonl` holds the questions a message asks, with `record.message_id`, `record.prompt` and `record.answer` (null until the person picks). Reading those directly is what this mod used to do, and it cannot be made right: an agent's message is re-appended under the same id whenever the thread moves, so a message's true first appearance, and therefore "is this newer than the person's cursor", is not recoverable from the tail of the file. The Inbox has the whole history in memory and the arithmetic to go with it, so ask it.
+  `place: "none"` keeps Herdr from docking a copy (with tab-host
+  installed, that would be a second panel). `focusable` lets the panel
+  take the keyboard when it is clicked into. `tab` is `tab-host`'s field,
+  not Herdr's — Herdr ignores unknown keys, so the declaration is inert
+  without that mod: `badge` names the shared key the waiting count is
+  published on, `state` the key the panel's view is carried in from space
+  to space, `show` keeps the button out of machines without `plannotator`
+  on `PATH`, and `order` puts it at the right end of the contributors.
+- `mods/plannotator/icon.svg` — the button's glyph, `stroke="currentColor"`
+  and `fill="none"` so `tab-host` tints it with the button's text colour.
+- `keys.json` — six `global` bindings (see the README). Merge into the
+  person's `keys.json`, never replacing it. The `cmd-alt-i` binding is
+  `tab-host.toggle:plannotator` — that mod's command, spelled `tab-host`,
+  not `tabhost`.
+- Five `sh -c` scripts, because a mod has no directory or HTTP API of its
+  own: `ASK` (the Inbox over its loopback server — `curl -s -m 5` to a
+  route under `/api/inbox/`, the port read from `inbox.json`, a canned
+  error JSON when the server is down), `OPEN` (the Inbox in the browser by
+  hash route), `LIST` (one tree level, NUL-separated, `.git` skipped, 200
+  entries at most), `RUN` (a background session and its log),
+  `ANNOUNCE` (finished sessions, `__told`-marked, printed once).
+- `herdr` functions: `spaces`, `focused`, `panes`, `exec`, `run`, `theme`,
+  `props`, `openOverlay`, `closeOverlay`, `notify`, `watchFolder`,
+  `pickFolder`, `home`, `appHome`, `nextCommand`, `keys`, `shared`,
+  `setShared`. Programs: the `plannotator` CLI (`last`, `review`,
+  `annotate <path>`, `inbox --background`), `curl`, `open`/`xdg-open`,
+  `sh`. Icons are the shipped `workspace-chrome` set plus this mod's own.
+- The loopback routes are internal — the same requests the Inbox page
+  itself opens with, needing no token, but a new Inbox version can change
+  a payload. The parsers throw on a shape they don't know, which turns
+  that into the panel's one-line error rather than a blank page.
 
 ## Watch out
 
-- **The highlight can scroll out of view.** There is no scroll-to-row for a plain `overflow_y_scrollbar` column: `VirtualListScrollHandle` is the only such API and it belongs to `v_virtual_list`, whose rows are uniform, while the panel's are 24, 26, 28, 30 and 34 px and its threads are two lines. So ↑/↓ past the fold of a long open tree moves a fill the person cannot see; the wheel still scrolls. The fix, if it matters, is to rebuild the column as a virtual list with stated item heights plus the handle, the way the shipped `picker` mod does its own scrolling.
-- **There is no web view in Herdr.** The Plannotator page can only be the browser's; the background run exists to own the session and hold the address. Do not try to render the page inside a pane.
-- **The app's palette can be forked, and that is the only way to add an entry.** Its source sits at `~/.config/herdr-app/frame/palette/main.js` (rewritten from the app at every start): copy it to `mods/<name>/` with its `command.svg`, add one row to its `NAMED` table (`["mod.open", { name: "plannotator" }, "App", "Show Plannotator", "panel inbox"]`), and bind a key to `mod.open:<name>` — the app's own `app.palette` command keeps opening its own palette, so a fork needs its own key. It goes stale as Herdr adds commands, which is why this mod draws its own palette instead.
-- **`app.palette` cannot be extended, and it cannot even show `mod.open`.** The palette is itself a shipped mod (baked into the app, rewritten as `frame/palette` at every start). Its `entries()` is a fixed `NAMED` table, one row per layout, then every command not in `NAMED`/`HIDDEN` whose required arguments are only `name` — and `HIDDEN` contains `mod.open` (named once, in `NAMED`, as "Go to space or tab…" for the picker). So there is no "toggle a mod" entry to pick and no file to add one to; a mod's commands reach Herdr through `nextCommand()` only, which is why the palette here is the mod's own popup. Do not rebind `cmd-shift-p`.
-- **A popup is as big as its content, so the mod states its size.** `overlay.height` in `mod.json` is ignored for `kind: "popup"` (a share like `0.5` makes no difference), and a flex child inside an auto-height parent collapses to nothing. The palette's rows live in a `flex_1` column, so the palette gave itself `.w(520).h(340)` in its own `render` — without it the popup was the search line and nothing else. Anything that must fill a popup states its width and height there, never in `mod.json`.
-- **The tab bar's button is the door, and it is `tab-host`'s.** The button is drawn by another mod reading this one's `mod.json`; Herdr itself has no such button (`tabs`, the shipped tab bar, hardcodes `files` and `changes`), and without `tab-host` installed nothing of this mod appears on its own — `place: "none"` keeps Herdr from docking a copy. This mod's own `plannotator.*` keys reach a copy that is on screen, so with the panel hidden they are refused outright — Herdr toasts `unknown command "plannotator.inbox"` — and `cmd-alt-i` is the key to press instead: the copy it reaches belongs to `tab-host`, sits in the tab bar, and is on screen whether the panel is or not.
-- **A count for the button, for when the panel is collapsed.** Every read publishes how many threads are waiting on the person to `shared("plannotator.waiting")` — written only when the number changes, because `setShared` re-renders every mod. `tab.badge` in `mod.json` names that key, and `tab-host` draws whatever is in it as a chip after the label, so the number is visible with the panel put away, which is where the panel spends its time. Neither mod knows the other's name: this one publishes a count, that one renders the number it is given, and a chip only appears when the value is above zero.
-- **`layout.toggle:panel` lands on whatever tab the panel was last on, and that is why the key is not it.** `keys.json` fills a command's first argument, and showing this tab takes two commands — `layout.select {stack, child}` then `layout.show {id}` — so the plain layout toggle can only reveal the column on whatever tab the person left it on (another tab after a Files click, on a fresh session's first press). `tab-host.toggle:plannotator` is the same two commands under one name, which is the whole reason the key goes through that mod instead of through the layout.
-- **`props()` gives an overlay id, and it is not the mod's name**: an `openOverlay` popup gets `{"overlay": "plannotator"}`. Close it with `closeOverlay(props().overlay)` rather than reconstructing the id.
-- **An empty `div().w(12)` collapses to nothing as a row's spacer** — file rows then sit 18 px left of their folder's icon. Give a spacer a height too (`div().flex_none().w(12).h(12)`); that is what aligns a file under the chevron of a folder.
-- **There is no group-hover in gpui-kit**, so a folder's pen button cannot appear only while its row is hovered: it is always drawn, `dim`, and the row's `hover` fills behind it. The pen's `on_mouse_down("left")` stops propagation (`cx.stop_propagation()`), or the row's click would open the folder too.
-- **The shipped `files` panel has no right-click handler at all**, and shipped mods are read-only, so nothing can add an entry to *its* menu: the mod's own tree is where annotating by right-click lives.
-- Two copies both get the key: without the 500 ms guard one press starts two runs. The guard is module-level state, so it is per mod build, not per copy.
-- **Reading a thread is `seen`, and the two words are not the same thing in the Inbox.** `POST threads/<id>/seen` moves `person_seen_seq`, which is all "new since you looked" means; the blue dot goes and nothing else moves. `POST threads/<id>/read` — the Inbox's own Mark read — also writes `person_read_seq` and, silently, sets aside every open question the agent asked, with a skip answer and a new revision: the agent is told the person passed on it. That is the person's decision, made in a place that can show the picks, not a side effect of opening a thread in a panel, so the panel never makes it. What to expect: a thread with a question in it stays yellow and the badge stays where it was — the row is right, the question is still unanswered.
-- **The panel draws words, not a page.** Two things an agent's body can carry do not survive. Pictures (`![alt](/abs/a.png)` is a path in the person's own files, and a mod draws no files) come off the words entirely and are counted, with the count as a link under the message — the alt text goes with them, because the Inbox names those files (`pasted-image-2026-11-03-1452`) and a sentence with two pictures in it would carry two filenames through the middle of it; guides, markups and HTML embeds are not drawn at all. `:::question` comes off the words now: the Inbox parses those blocks beside the body into `messages[].questions` — `key`, `kind`, `prompt`, `context`, `choices`, `recommendation`, `holds_up`, `answer`, `set_aside_at`, `superseded_by` — and each one is drawn as a card from that record, with the block's own words taken out of the message so nothing is said twice (`wordsWithoutQuestions`). `:::action` is not parsed into anything the panel draws, so its words stay as prose. What a card cannot do is answer: the choices are rings, not pickers, and the only click in it is the way to the page. That is the line between reading here and answering in the Inbox.
-- **The reply box's `field(cx)` and a question's `answerField(m, q, slot, cx)` are two names on purpose.** They were both `field` for one commit, and in a class the second one silently wins — the reply box stopped being created, `full` went false, and the panel drew a thread page with no way to answer it in words. Same-name methods are not overloads here; if a helper needs a name that is taken, change the name.
-- **A page cannot scroll itself.** The host hands out a scroll position only through `VirtualListScrollHandle`, and that handle belongs to `v_virtual_list` — whose item renderer throws on `on_click`, which is what every ring, field and link on a question card is made of. `overflow_y_scrollbar` has no offset to set. So a list that must open at its end is *arranged* that way instead: the thread draws its last three messages with the rest behind a count row, and a message holding a question nobody has answered is never among the hidden ones.
-- **A context does not survive the call that made it.** A click handler's `cx` is good for the clicks's own frame; `await` a request and then use it, and the host draws "cx is no longer valid: it was captured during an earlier call and used later" in the middle of the panel. The reply's POST is wrapped in `cx.spawn(async (cx) => ...)` for exactly this - the callback's context lives as long as the work - and anything else that waits (a thread's read, the inbox poll) is written the same way. The thread's id is kept as a plain string beside it, so a person who leaves the thread mid-request is not answered with a field-emptying for a thread they are no longer in.
-- **The reply’s field is the band, not a box inside one.** It started as a bordered, rounded box inset 12 px inside the footer, which put a frame around a frame at the bottom of every thread. The band runs the panel’s full width on `popover`, the same token the person’s own messages are boxed in, and the rule over it is what says the caret is there — `accent` while the person is in it, `border` otherwise. The row under it sits on the panel’s last pixel; the card’s rounding clips it.
-- **The recommendation sits on the choice it names, when it names one.** The Inbox puts it in a line of its own under the choices, where it makes the person look back up to find which one was meant. Matched against the labels (trimmed, case-insensitive) it becomes a “Recommended” chip after that label — `selected` fill, `accent` text — and only a recommendation that names no choice on the card keeps the line.
-- **The panel’s view sticks to the space, and the carry is `tab-host`’s.** `tab.state` names `plannotator.state`; tab-host keeps one value of it per space — saved under the space being left, handed back to the arriving one, `null` when it never had any — so the thread on screen, the folders open in the tree, the row the keys are on and whether the whole conversation is shown all come back when the person does. The record is written only from the panel’s own doings — a click, a key — never from a render, the watchers or the timer, because a copy asleep in another space must not write its stale view into the space the person is in. A copy that adopts a carried record must not adopt its own echo either: the last JSON this copy wrote or took is kept (`stateJson`), and only a value that differs is another space’s record. A thread restored from a record arrives as the stub `openThread` starts from and is read again from there; its reply field — which cannot be made in a render — is made by the task that reads it, the same way the fields behind a card’s saved answers are.
-- **A Send carries words and the answers the cards picked — and that is still not the whole of an answer.** `POST /api/inbox/messages/<message id>/reply` takes `words`, `questions` (the picks, each as `{message_id, key, revision}`, with the answer already saved in the Inbox), `idempotency_key` and `seen_through_seq`. The panel’s own picks are saved as they are made (`POST messages/<id>/picks`, the Inbox’s own draft — the same one its page keeps), and the reply’s `questions` says which of those drafts go with the words, so a pick made here is the browser’s and one made in the browser is the panel’s, without either side keeping a copy. What still costs a page: pictures are uploads (`POST /api/inbox/uploads`, then `uploads`), and tags, handoffs, action reports and resolves are their own routes. The row under the field is where those live.
-- **An answer is the Inbox's draft, saved as it is made.** A click on a ring POSTs `messages/<id>/picks` with `{questions: [{key, revision, answer}]}`, and the answer is the protocol's QuestionAnswer v1: `{v: 1, key, kind, prompt, selected, other, text, note}`. `selected` may only name the question's own choices — anything else is refused with `validation_error` — so the person's own option is `other`, a note on the answer is `note`, and a written question's answer is `text`. Both are always offered, whatever the choices are: the Inbox takes them on every question, and its own page shows "Other" and a note for all of them. Nothing is sent until the reply's Send, which names the picks by `{message_id, key, revision}` and lets the Inbox send the answers it already holds — a pick still in flight is waited for first, and a card shows "Picked, not sent" in `accent` in between. The response is the message's questions as the Inbox now holds them, new `revision` and all, so the rings are drawn from the record rather than from what the panel hopes it sent.
-- **A reply that would land under words the person never saw is refused, not lost.** `seen_through_seq` is the newest seq the panel drew; if the agent wrote after that, the Inbox answers `thread_moved_on`, nothing is sent, the words stay in the field, and the thread is read again to show what moved it. The `idempotency_key` is made per send and the Send button is busy-guarded, so a double click cannot post twice.
-- **A dot is the Inbox's own bucket, not a reading of the files.** Yellow, blue and grey are "Waiting on you"/"Holding up work"/"Stopped on you", "New since you looked", and "Sent"/"Quiet" — so the dot agrees with the Inbox page, which is the thing the person will compare it against. The precedence is the Inbox's too: it marks a thread read when the person has seen it, and a read thread stays quiet even with an open question in it. Do not re-derive this from `person_seen_seq` in the store: the seen cursor is real, but a message's first appearance is not recoverable from a file tail (an agent message is re-appended under the same id on every write), which is what made an earlier version call every thread unread.
-- `/api/inbox/threads` is an internal route: it is in the Inbox's own allowlist and its page opens with it, but it is not documented for mods, so a new Inbox version can change the payload. The parser throws on a payload without `sections`, which turns that into a visible error line in the panel; `curl -s http://127.0.0.1:$(sed -n 's/.*"port": *\([0-9]*\).*/\1/p' ~/.plannotator/inbox/inbox.json)/api/inbox/threads | head -c 200` is the whole check. Nothing is archived or filtered here either: the archived threads the Inbox keeps out of its list are out of this list too.
-- The panel talks to the Inbox's loopback server directly, and only to it: `GET /api/inbox/threads` for the list, `GET /api/inbox/threads/<id>` for a thread's messages, `POST /api/inbox/threads/<id>/seen` for the seen cursor, `POST /api/inbox/messages/<id>/picks` for the answers picked in the cards, `POST /api/inbox/messages/<id>/reply` for the words in the field and the picks that go with them. None needs a token from loopback - they are the requests the Inbox page itself makes, with no `Origin` header, which the server's own origin guard allows (checked: a bogus id answers `thread_not_found`, not `403`, and a stale `serverSession` answers `409`) - and the route table behind them is internal, so a new Inbox version can change a payload. The parsers throw on a shape they don't know, which turns that into the panel's one-line error rather than a blank page. **This is the whole write surface: a cursor, an answer’s draft, and a reply.** No resolve, no upload, no tag, no handoff and no skip can go out from the panel.
-- The tree's root is the focused pane's live folder, which follows the person from pane to pane; in a space whose terminal sits in `~` it starts at the home folder, 200 entries at most per folder, with `.git` skipped and hidden names listed as they are (there is no dotfile filter).
-- The panel's content column is capped at 760 px and centred; the whole panel scrolls, so opening the tree pushes the lists into that scroll. What it remembers — the thread on screen, the folders open in the tree, the row the keys are on — is one small record in `plannotator.state`, carried from space to space by tab-host; the reply field’s words are deliberately out of it, because they change every keystroke and `setShared` re-renders every mod.
-- **A copy that is on screen keeps running, and that is what the tab bought.** Herdr starts a block's copy the first time it shows and then keeps it alive while the block is in the layout — a hidden column or another stack child included — timers and watchers and all. Proved here: with the panel hidden, a `{"decision": "approved"}` and `__exit 0` dropped into a session log became a Herdr toast a second later, with `__told` appended, no key pressed and no panel open. What it does **not** do is start a copy nobody has looked at, so after a restart the first decision waits for the button (or `cmd-alt-i`) to be pressed once — and that toast needs no poll of its own: the block is in the layout, so Herdr starts it at the next start too, which is why the button is the whole mechanism. Herdr cannot post a toast from outside either (`herdr-app commands` has no toast or notify, `mod.open` takes no props, and a *settled* tab keeps its terminal but not its mod: `herdr-app do tab.new --mod plannotator`, `tab.settle`, then `plannotator.*` answers "needs the mod loaded"). A hidden column answers the same way — `unknown command "plannotator.inbox"`, the person's own report — even though its copy is still watching: a live watcher and an addressable command queue are not the same thing, which is why the inbox key is two presses when the panel is away (⌥⌘I, then ⌥⇧⌘I). Hence one signal, not three: the tab copy's Herdr toast, the second the decision lands, with the panel hidden — no desktop banner, and nothing to reconcile when a copy starts late.
-- **Started runs are not tabs**, so an unexpected exit leaves nothing on screen: `plannotator review` in a folder that is not a git repo, or a `plannotator` that is not on `PATH`, shows up as `__exit 127` and `sh: plannotator: command not found` in that run's log, and the toast says the label with nothing after it. Read `~/.config/herdr-app/data/plannotator/sessions/` for it; nothing prunes those logs. `cmd-alt-*` is safe on macOS; on Linux and Windows bind `ctrl-shift-*` instead (ctrl+alt is AltGr there).
-- **`tab` is not a Herdr field (0.1.12); it is `tab-host`'s manifest.** Herdr ignores an unknown key in `mod.json` — `herdr-app check` passes with it, verified — which is what makes the declaration safe to ship: it is inert without `tab-host`, and if the core takes herdrdev/herdr-app#246 the same field becomes a button Herdr draws itself. `place` must stay `"none"` either way, or Herdr docks a second copy of the panel on its own.
-- The mod can still be put in a layout or a space tab (`{"type": "block", "content": {"mod": "plannotator"}}`, or "Open Plannotator as a tab" in the palette, which is a tab of the space beside the side panel's tab-host one); there it draws its own card, since no frame is drawn around it.
-- The preview above is a drawing, not a photograph: a poster of the mod in the app's own chrome — wordmark, the headline “Plannotator, one tab away.”, the pitch (“Open the Plannotator Inbox in a Herdr panel alongside your agents with `cmd-alt-i`. Or jump into a Plannotator review session with keyboard shortcuts.”), one sentence a line, then two windows, each with the tab bar's Plannotator button carrying its `2` badge. The left window is the panel: the thread list with one amber question waiting, and the annotate list below it. The right window is the thread it opens, the question card answered in place — rings, “Recommended”, a reply in the band, a Send. Every thread, project and path in it is fiction; the palette is sampled from a real screenshot, and the drawing is `assets/preview.html` rendered headless at 1600×1000 (8:5). The photographed truth ships beside it as `assets/preview-photographed.png` — a 368 px crop of the panel as the side panel really drew it, header, five threads with their (grey, all read) dots, and the annotate list with the tree closed — for what the poster's mock stands for. `assets/preview-window.html` is the same drawing at the whole-window scale (rendered as `assets/preview-window.png`) if a full window is ever wanted.
+- **A context does not survive the call that made it.** Anything that
+  awaits and then draws is wrapped in `cx.spawn(async (cx) => …)`, or the
+  host draws "cx is no longer valid" across the panel.
+- **State made during a render throws.** `TextareaState`, `InputState` and
+  focus handles are made from event handlers or tasks, never in `render`.
+- **Two methods of one name on a class is the second one winning
+  silently** — not overloads. `field(cx)` and `answerField(...)` are two
+  names because of it.
+- **`place` must stay `"none"`, and without `tab-host` nothing of this mod
+  appears on its own.** The shipped tab bar (`tabs`) hardcodes Files and
+  Changes; the button is `tab-host`'s, drawn from this manifest, and the
+  panel's tab is `tab-host`'s block in the side panel's stack. No
+  `tab-host`, no button and no panel — only a layout block
+  (`{"type": "block", "content": {"mod": "plannotator"}}`) shows the card
+  by hand. With `tab-host` installed, a dockable place would dock a second
+  copy.
+- **There is no web view in Herdr**, and the app's own palette cannot be
+  extended (`mod.open` is hidden from it) — so the page opens in the
+  browser, and the palette here is the mod's own popup, under its own
+  key. A popup sizes itself: `overlay.height` is ignored for
+  `kind: "popup"`, so the palette states its 520×340 in its own `render`.
+- **A mixed-height column cannot scroll to a row.** The only scroll-to
+  API belongs to `v_virtual_list`, whose renderer throws on clicks — and
+  question cards are made of clicks. So ↑/↓ can move the highlight past
+  the fold of a long tree, and the thread page is *arranged* to open at
+  its end instead: the last three messages drawn, the rest behind a count
+  row, no question ever among the hidden ones.
+- **`surface` resolves to the same colour as `background` in this
+  palette** — box the person's messages in `popover` instead. `theme()`
+  reports the resolved tokens; read it before trusting a token's name.
+- **`setShared` re-renders every mod.** The badge is written only when the
+  number changes. `plannotator.state` (the view per space) is written only
+  from the panel's own doings — a click, a key, never a render — and
+  adopted only when it differs from the last value this copy wrote or
+  took, or a copy's own echo would re-adopt its stale view into the space
+  the person is in.
+- **Dots are the Inbox's buckets, not a reading of the files.** Do not
+  re-derive them from `messages.jsonl`: an agent's message is re-appended
+  under the same id on every write, so what is newer than the person's
+  cursor is not recoverable from the file tail. Ask the Inbox — it has
+  the history and the arithmetic.
+- **No group-hover exists in gpui-kit**: the folder pen is always drawn,
+  `dim`, and its `on_mouse_down` stops propagation or the row would open
+  too. A spacer `div().w(12)` collapses to nothing without a height.
+- **The reply field is the band, not a box inside one** — a frame around a
+  frame at the bottom of every thread read as clutter; the band runs the
+  panel's full width on `popover`, and the rule over it (not a border on
+  it) says the caret is there.
 
 ## Done when
 
-- `herdr-app check ~/.config/herdr-app/mods/plannotator` passes, and `~/.config/herdr-app/data/tab-host/reconcile.log` ends with a line naming `tabs=[plannotator]` and `set [files|changes|tabhost-plannotator]`.
-- A Plannotator button with a page-with-a-check glyph sits at the right end of the tab bar; clicking it shows the side panel on the Plannotator tab with the button filled `selected`, clicking it again hides the panel, and `cmd-alt-i` does the same from the keyboard — including when the panel is showing **Files**: it selects this tab first, so the key never lands on whatever the panel was last on. No 380×620 popup opens any more: `herdr-app status` reports `overlays: []` after the key and after a click, and `~/.config/herdr-app/data/tab-host/reconcile.log` gets one line per press, `command "toggle:plannotator" → shown (and → hidden on the second press)`.
-- With `"plannotator.waiting": 1` in `shared.json`, the button reads `Plannotator 1` — a chip after the label — with the side panel collapsed, and the panel's own header chip shows the same 1 once it is open. Narrow the window until the label truncates: the chip stays.
-- Once the panel has been shown in a session, `~/.config/herdr-app/shared.json` holds `"plannotator.waiting": <n>`, where n is the number of threads in the Inbox's stopped/holding/waiting buckets (`curl -s http://127.0.0.1:<port>/api/inbox/threads | python3 -c` over `sections` answers it), and the tab bar button wears that n as a chip. It changes only when a thread changes bucket, so an unchanged list writes nothing (`setShared` re-renders every mod).
-- The panel draws in the side panel's width: the header `Plannotator` with the two icon buttons and no cross, "Threads" with up to five rows, the annotate list, the Files toggle and "Another folder…" — no popup frame, no clipped rows.
-- Each thread's first line starts with a 7 px dot, and the dot is the Inbox's own bucket: yellow for a thread in its "Stopped on you", "Holding up work" or "Waiting on you"; blue for one in "New since you looked"; grey for "Sent" and "Quiet". `curl -s http://127.0.0.1:<port>/api/inbox/threads` (port from `~/.plannotator/inbox/inbox.json`) shows the same sections, and a fresh Inbox where everything has been looked at is all grey. The count chip in the header is the number of yellow ones, and the rows come yellow first, then blue, then grey.
-- With the Inbox server stopped, the panel says "The Inbox is not running" instead of drawing rows, and it fills itself in again (a minute at most) once the Inbox is running — any agent's next call starts it, or the panel's own page button does.
-- A new message an agent sends to any thread appears as a row within a second, without touching the app, and turns that thread's dot blue if the person has not looked yet. With that thread open, the message appears in the thread instead, and the seen cursor follows it to the newest message drawn.
-- Opening a blue thread in the panel turns its dot grey within a second — `person_seen_seq` moved, `person_read_seq` did not (`curl -s http://127.0.0.1:<port>/api/inbox/threads/<id>` shows `unseen: 0`, `read_at: null`) — and a thread with an open question stays yellow with the chip still counting it. Nothing in the panel answers for the person on its own: this opening moves the seen cursor (`messages.jsonl` gains a seen record) and nothing else — replies and picks go out only from the person's own Send and clicks.
-- Clicking a thread opens it in the panel — the header turns into a back chevron and the thread's subject, and the same messages the Inbox page shows are drawn as markdown; Esc or the chevron puts the list back, and nothing opens in the browser. "Open in Inbox for picks and pictures", Return on that row, and the header's `file-text` button open one tab of the running Inbox at `#thread=<id>`. The palette button, the tree's folders and "N more in the Inbox" leave the panel where it is, and only the palette and a row's menu close themselves.
-- Typing in the field and pressing Send puts a reply at the end of the thread with the person as its author (`curl -s http://127.0.0.1:<port>/api/inbox/threads/<id>` shows it), the field empties, and the agent's session gets it the way it gets any reply. ↑/↓/Return do nothing to the panel's highlight while the caret is in the field, and typing a paragraph does not move the row the keys are on.
-- With the thread open and the agent writing meanwhile, Send leaves the words in the field, says “The agent wrote again after you read this thread; your reply was not sent. Read it again, then reply.” under the band, and the thread redraws with the new message. Sending the same words again then works. An empty field with nothing picked draws its Send `dim` and does nothing.
-- With the panel focused, ↑/↓ move the `selected` fill row by row over the threads, "N more", the three annotate rows, the Files toggle, the tree rows and "Another folder…"; Return on a folder opens or closes it and on anything else starts that session; Esc does nothing (left to the app), and a click on a folder leaves the highlight on that row.
-- "This space" reads as a peer of "Last message" and "Review changes", with the space's folder in `~/…` form at its right, and clicking it starts `plannotator annotate <space folder>`; "Files · N" under it counts the folder's entries and opens a tree under itself, folders first; opening a folder shows its children indented 12 px, and a folder opened two levels deep works the same. Clicking a file's row annotates that file, the pen on a folder's row annotates that folder.
-- Right-clicking any tree row opens the 300 px menu; its first item annotates that path, "Annotate all files" annotates the space folder, "Review changes here" runs `plannotator review` in the row's folder.
-- Clicking "Last message" starts `plannotator last` in the background (no tab appears, `ls ~/.config/herdr-app/data/plannotator/sessions/` gains a log, the annotate page opens in the browser), and the same for "Review changes" and "Another folder…"; when the page's decision is made, the log ends with `__exit 0` and **no desktop notification fires**, because `RUN` no longer calls `notify-send` or `osascript`.
-- With the panel showing this tab, `cmd-alt-shift-p` opens the 520×340 palette with six rows (all of it on screen, not just the search line), the key bound to each on the right where one is bound; typing `rvw`, ↑/↓, Enter and Esc all work, and Enter starts the same session the matching row would. `cmd-alt-shift-i` opens the Inbox (with the panel showing this tab; while it is collapsed Herdr toasts `unknown command "plannotator.inbox"`); `cmd-alt-a` annotates the space's folder. With the panel on another tab, hide the panel first: a mod command reaches only a copy that is on screen.
-- With the panel hidden, appending `{"decision": "approved"}` and `__exit 0` to a log in `~/.config/herdr-app/data/plannotator/sessions/` posts a Herdr toast "Plannotator / <label>: approved" within a couple of seconds and appends `__told` — nothing clicked, nothing opened.
-- Clicking into the side panel gives the panel the keyboard, and then ↑/↓, Return and a click on a folder work there; Esc falls through to the app instead of closing anything.
-- A question card in an open thread is answered from the panel: a click on a ring fills it, the card reads “Picked, not sent” in `accent`, a re-read of the thread carries the answer with its new `revision`, and the band under the field says “1 answer goes with this reply”. Send takes both — the card settles to “Answered” in `done` blue and the words come back as a message of the person’s own, boxed with the 2 px `accent` rule down its left. Answering the same question in the browser is the same draft: the panel’s rings follow it on the next read, without either side guessing.
-- A second space gets its own view, and both keep theirs: open a thread and a folder of the tree in one, switch away and back, and each is as it was left — thread on screen, folders open, the keys where they were — while the other space kept its own; every switch is a `state <space> → <space>` line in tab-host’s `reconcile.log`.
-- A recommendation that names a choice wears its “Recommended” chip beside that choice’s label; one that names no choice keeps its “Recommended:” line under the choices.
+- `herdr-app check` passes on both copies, and tab-host's `reconcile.log`
+  ends with a line naming `tabs=[plannotator]`.
+- The button sits at the right end of the tab bar, badge chip on while
+  the panel is closed and off when nothing waits; a click or `cmd-alt-i`
+  shows this tab and hides it again, and the key lands on this tab even
+  when Files was the one showing.
+- A thread an agent sends is a row within a second; the dots match the
+  Inbox page's buckets; the header chip counts the yellow ones; an empty
+  Inbox says so and a stopped one says "The Inbox is not running".
+- Opening a thread moves the seen cursor (the blue dot goes) and nothing
+  else; a thread with an open question stays yellow.
+- A pick fills its ring, the card reads "Picked, not sent", the band says
+  "1 answer goes with this reply", Send settles the card and posts the
+  words — and the same draft is visible in the browser.
+- A reply under words the person never saw is refused with the Inbox's
+  own sentence, the words stay, and the thread re-reads to show what
+  moved it.
+- Sessions start in the background (no tab, a log per run) and a decision
+  becomes one Herdr toast within the second, panel hidden, `__told`
+  keeping it single.
+- ↑/↓/Return walk the rows; the field holds every key but Esc while the
+  caret is in it; two shown copies make one press one run.
+- Two spaces keep their own thread and open folders, and each comes back
+  with its highlight where it was left.
+
+- The preview above is a drawing, not a photograph: a poster of the mod
+  in the app's own chrome — wordmark, the headline "Plannotator, one tab
+  away.", the pitch ("Open the Plannotator Inbox in a Herdr panel
+  alongside your agents with `cmd-alt-i`. Or jump into a Plannotator
+  review session with keyboard shortcuts."), one sentence a line, then
+  two windows, each with the tab bar's Plannotator button carrying its
+  `2` badge. The left window is the panel: the thread list with one amber
+  question waiting, and the annotate list below it. The right window is
+  the thread it opens, the question card answered in place — rings,
+  "Recommended", a reply in the band, a Send. Every thread, project and
+  path in it is fiction; the palette is sampled from a real screenshot,
+  and the drawing is `assets/preview.html` rendered headless at
+  1600×1000 (8:5). The photographed truth ships beside it as
+  `assets/preview-photographed.png`, and `assets/preview-window.html` is
+  the same drawing at the whole-window scale
+  (rendered as `assets/preview-window.png`).
