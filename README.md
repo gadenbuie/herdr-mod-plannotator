@@ -39,7 +39,9 @@ cd herdr-mod-plannotator
 `install.sh` copies the mod into `~/.config/herdr-app/mods/`, adds the key
 bindings you don't already have (replacing nothing, with a backup beside
 your `keys.json`), and runs `herdr-app check`. Without tab-host it also
-docks the panel on the right; with tab-host the manifest ships as-is
+docks the panel on the right — Herdr's one-time first dock; after that
+it is a normal block in your layout, to move, resize or remove like any
+panel. With tab-host the manifest ships as-is
 (`place: "none"`) and the panel lives on the tab bar's tab. Or skip the
 script entirely: your agent can copy `mods/plannotator/` into
 `~/.config/herdr-app/mods/`, add its block
