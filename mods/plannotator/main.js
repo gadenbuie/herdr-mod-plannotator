@@ -2050,6 +2050,7 @@ export default class Plannotator extends View {
     const px = this.pictureWidth(p.file, PICTURE_CAP);
     return v_flex().id(`pl-in-${m?.id}-${p.i}`).w_full().flex_none().items_center()
       .child(h_flex().id(`pl-in-b-${m?.id}-${p.i}`).flex_none().rounded(6).cursor_pointer()
+        .hover((s) => s.opacity(0.92))
         .on_click(() => this.openPicture({
           rel: p.file.rel,
           name: p.alt,
