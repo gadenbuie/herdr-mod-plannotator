@@ -474,6 +474,84 @@ function wordsWithoutQuestions(body) {
   return String(body ?? "").replace(/^:::question(?:-multi|-text)?\n[\s\S]*?^:::$/gm, "").replace(/\n{3,}/g, "\n\n").trim();
 }
 
+// A message's, or a document's, words cut into the blocks a comment can be put on: a
+// blank line ends one, and a fenced code block is one block however empty the lines inside
+// it are. The panel cannot read the person's selection — Herdr hands a mod no way to ask
+// for one, and the text's own selection belongs to the host — so the block under the
+// pointer is the anchor: its first line is the quote, and the whole block is the words the
+// comment is about. Nothing else has to be true of the markdown for this to hold: a block
+// split at a blank line renders as the same markdown it did inside the whole.
+function blocksOf(text) {
+  const out = [];
+  let block = [], fence = false;
+  for (const line of String(text ?? "").split("\n")) {
+    if (/^\s*(?:```|~~~)/.test(line)) fence = !fence;
+    if (!fence && line.trim() === "") {
+      if (block.length > 0) out.push(block.join("\n"));
+      block = [];
+      continue;
+    }
+    block.push(line);
+  }
+  if (block.length > 0) out.push(block.join("\n"));
+  return out.filter((b) => b.trim() !== "");
+}
+
+// The line a comment stands for, as the band over the field shows it: the block's first
+// line with the markdown that marks a block off taken away — a heading's hashes, a quote's
+// chevron, a list's bullet — and cut where a 368 px column would cut it anyway.
+function quoteOf(block) {
+  const line = String(block ?? "").split("\n").map((l) => l.trim()).find(Boolean) ?? "";
+  const plain = line
+    .replace(/^(?:```|~~~).*$/, "code")
+    .replace(/^#{1,6}\s+/, "")
+    .replace(/^>\s*/, "")
+    .replace(/^(?:[-*+]|\d+[.)])\s+/, "")
+    .replace(/[*_`]/g, "")
+    .trim();
+  return plain.length > 110 ? `${plain.slice(0, 107).trimEnd()}…` : plain;
+}
+
+// What a reply's `feedback` says to the agent: the Inbox puts it in the message the agent
+// reads, after the person's own words, so a comment arrives next to what it is about — the
+// file or the message, then the quote the person highlighted, then what they wrote.
+function feedbackOf(notes) {
+  return notes.map((n) => {
+    const where = n.target?.file ? `Comment on \`${n.target.file}\`` : "Comment on your message";
+    const quote = n.quote ? `> ${n.quote}\n\n` : "";
+    return `**${where}:**\n\n${quote}${n.text}`;
+  }).join("\n\n");
+}
+
+// A comment's id: the Inbox asks for a short one, and nothing else reads it — it is the
+// record's own name, and the name a Send hands back to the Inbox as `annotation_ids`.
+function noteId() {
+  return `note-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+}
+
+// One comment, saved where the Inbox's own page saves one: against the message whose words
+// it is about, or — for a file — against the attachment's sent copy, which is the version
+// on screen. The server fills in the project, the thread, the path and the time, and hands
+// the record back; a refusal throws the Inbox's own sentence, which the band shows.
+async function postNote(note) {
+  const t = note.target ?? {};
+  const annotation = {
+    id: note.id,
+    blockId: t.blockId ?? "",
+    startOffset: 0,
+    endOffset: String(note.quote ?? "").length,
+    // A comment on a whole file stands on no block: that is the Inbox's own general comment.
+    type: t.blockId ? "COMMENT" : "GLOBAL_COMMENT",
+    text: note.text,
+    originalText: note.quote ?? "",
+    createdA: Date.now(),
+  };
+  if (t.kind === "file") {
+    return asked("POST", "annotations", { attachment_id: t.attachmentId, version: t.version, annotation });
+  }
+  return asked("POST", `messages/${t.messageId}/annotations`, { annotation });
+}
+
 // A subsequence score, the way a palette reads; null when q isn't there at all.
 function fuzzy(q, text) {
   const t = text.toLowerCase();
@@ -527,6 +605,18 @@ export default class Plannotator extends View {
     this.pending = null;
     // Whether the person has asked for the whole conversation; see `renderThread`.
     this.showAll = false;
+    // A comment is made on a block of words, not on a selection (`blocksOf` says why).
+    // `pressed` is the press a bar waits on, `aiming` that bar — where the pointer let go,
+    // on what — `commenting` the field the bar opens, and `notes` the comments staged for
+    // the thread on screen: each one already saved to the Inbox as a draft, and each one
+    // carried by the next Send. `notedFor` is the thread those belong to, `inboxComments`
+    // how many its draft holds, which the browser may have added to.
+    this.pressed = null;
+    this.aiming = null;
+    this.commenting = null;
+    this.notes = [];
+    this.notedFor = null;
+    this.inboxComments = 0;
     // A file an agent attached, open in the panel: its own page, with the header's back
     // button returning to the thread. `null` while a thread or the list is on screen.
     this.viewing = null;
@@ -667,6 +757,16 @@ export default class Plannotator extends View {
     this.reply = null;
     // The conversation starts folded: see `renderThread`.
     this.showAll = false;
+    // The bar and the field are the page's, so they go with it, and so do the comments
+    // staged on it: another thread's are in that thread's draft in the Inbox, not here. A
+    // thread opened again keeps its own, which is what the session can still hand it.
+    this.aiming = null;
+    this.closeComment();
+    if (this.notedFor !== id) {
+      this.notes = [];
+      this.inboxComments = 0;
+      this.notedFor = id;
+    }
     this.saveState();
     this.forgetFields();
     cx.notify();
@@ -706,9 +806,11 @@ export default class Plannotator extends View {
   // the words, and the thread is read again to show what moved it.
   send(cx) {
     const o = this.opened, words = String(this.draft?.value() ?? "").trim();
-    // Words are not the only thing a Send can carry: the answers picked in the cards go with
-    // them, and picks alone are a reply the Inbox takes on its own.
-    if (!o?.thread || (!words && this.unsentPicks(o.thread).length === 0) || this.reply?.busy) return;
+    // Words are not the only thing a Send can carry: the answers picked in the cards, and the
+    // comments made on the words of the page, go with them — and either of those alone is a
+    // reply the Inbox takes on its own.
+    const notes = this.notes.filter((n) => n.text);
+    if (!o?.thread || (!words && this.unsentPicks(o.thread).length === 0 && notes.length === 0) || this.reply?.busy) return;
     const target = lastAgentOf(o.thread.messages);
     if (!target) {
       this.reply = { busy: false, error: "This thread has no agent message to answer." };
@@ -729,17 +831,32 @@ export default class Plannotator extends View {
         // refused as unsent. The send waits for the last save to settle first.
         if (this.pending) await this.pending.catch(() => {});
         const picks = this.unsentPicks(this.opened?.thread);
-        await asked("POST", `messages/${target.id}/reply`, {
+        // The comments go the way the Inbox's own page sends them: rendered in `feedback`,
+        // which the Inbox puts after the person's words in the message the agent reads, and
+        // named as `annotation_ids`, which is what settles the drafts it is holding.
+        const body = {
           words,
           // Every answer this thread has made and not sent, named the way the page names
           // them: `{message_id, key, revision}`, with the answer already saved in the Inbox.
           questions: picks,
+          ...(notes.length > 0 ? { feedback: feedbackOf(notes) } : {}),
+          ...(notes.some((n) => n.serverId) ? { annotation_ids: notes.map((n) => n.serverId).filter(Boolean) } : {}),
           idempotency_key: `panel-${id}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`,
           ...(seen > 0 ? { seen_through_seq: seen } : {}),
-        });
+        };
+        try {
+          await asked("POST", `messages/${target.id}/reply`, body);
+        } catch (e) {
+          // An id the Inbox does not know refuses the whole reply. The comments' words are in
+          // the feedback whatever the ids say, so the reply goes out without naming them
+          // rather than not at all.
+          if (!body.annotation_ids || !/annotation/i.test(String(e?.message ?? ""))) throw e;
+          await asked("POST", `messages/${target.id}/reply`, { ...body, annotation_ids: undefined });
+        }
         // The person may have gone back, or into another thread, while this was out:
         // then the field on screen is that thread's and the words in it are not these.
         if (this.opened?.id !== id) return;
+        if (this.notedFor === id) this.notes = [];
         this.draft.set_value("");
         this.reply = { busy: false, error: null };
         this.loadThread(cx);
@@ -767,6 +884,10 @@ export default class Plannotator extends View {
         if (!Array.isArray(data?.thread?.messages)) throw new Error("The Inbox answered in an unknown shape");
         this.opened.thread = data.thread;
         this.opened.error = null;
+        // How many comments this thread's draft in the Inbox holds. Some of them may have
+        // been made in the browser, or on this thread in a past run of the panel, so the
+        // band counts them rather than trusting only the ones it made itself.
+        this.inboxComments = Number(data?.row?.unsent?.comments) || 0;
         // A thread restored from the carried state (see `syncState`) arrived with no
         // reply field, and a field cannot be made in a render — this task can make
         // one, the same way `seedFields` makes its own.
@@ -805,6 +926,13 @@ export default class Plannotator extends View {
   // Back to the list. The panel's copy is a page, not an overlay, so this closes
   // nothing: it puts the list back, which the next read has already kept fresh.
   back(cx) {
+    // A comment being written is the first thing a back press puts away: the field is one
+    // press deep, and the words in it would be gone with the page.
+    if (this.commenting) {
+      this.closeComment(cx);
+      return true;
+    }
+    this.aiming = null;
     // A file is one page under the thread it came in, so the first back is the thread
     // and the second is the list.
     if (this.viewing) {
@@ -825,6 +953,183 @@ export default class Plannotator extends View {
     this.forgetFields();
     cx?.notify();
     return true;
+  }
+
+  // ---- a comment on the words ----
+
+  // A press inside a block, waiting for the release that tells a highlight from a click:
+  // the same block, and the pointer moved. Anything else is not a comment and opens
+  // nothing — a click to hand the panel the keyboard, a drag that ends in another block.
+  aimDown(key, e) {
+    this.pressed = { key, x: Number(e?.position?.x) || 0, y: Number(e?.position?.y) || 0 };
+    if (this.aiming && this.aiming.key !== key) this.aiming = null;
+  }
+
+  aimUp(key, e, target, block, cx) {
+    const down = this.pressed;
+    this.pressed = null;
+    if (!down || down.key !== key) return;
+    const moved = Math.hypot((Number(e?.position?.x) || 0) - down.x, (Number(e?.position?.y) || 0) - down.y);
+    if (moved < 4) return;
+    // One comment at a time: a drag in another block while a field is open and being
+    // typed in would throw those words away to offer a second bar, and Esc is already the
+    // way to leave one.
+    if (this.commenting) return;
+    const at = e?.local_position ?? { x: 6, y: 6 };
+    this.aiming = { key, at: { x: Number(at.x) || 0, y: Number(at.y) || 0 }, target, block };
+    cx?.notify();
+  }
+
+  // The bar, become the field.
+  openComment(cx) {
+    const a = this.aiming;
+    if (!a) return;
+    this.aiming = null;
+    this.openCommentOn(a.key, a.target, a.block, cx);
+  }
+
+  // The field for a comment on one block — or on a whole file, which has no block to press
+  // in: the code view is the `Editor`'s, and the row under the facts is its way in.
+  openCommentOn(key, target, block, cx) {
+    this.closeComment(cx);
+    const field = TextareaState.new({ placeholder: "What about it?" });
+    field.set_auto_grow(3, 6);
+    field.on("submit", (e, cx) => { if (e?.secondary === true) this.saveNote(cx); });
+    field.on("focus", (_e, cx) => { this.writing = true; cx.notify(); });
+    field.on("blur", (_e, cx) => { this.writing = false; cx.notify(); });
+    this.commenting = { key, target, block, quote: quoteOf(block), field };
+    this.pressed = null;
+    cx?.notify();
+    // The caret goes in once the frame that draws the field is there: a field made and
+    // focused in the same call has nowhere to put one yet.
+    cx?.spawn(async (cx) => {
+      await cx.sleep(30);
+      if (this.commenting?.field === field) field.focus();
+      cx.notify();
+    });
+  }
+
+  closeComment(cx) {
+    const c = this.commenting;
+    this.commenting = null;
+    this.writing = false;
+    if (c?.field) { try { c.field.release?.(); } catch { /* a released field is a field */ } }
+    cx?.notify();
+  }
+
+  // The field's words become a comment: kept in the band for the Send that carries it, and
+  // saved to the Inbox at once — the draft its own page keeps, so the browser counts it and
+  // the agent reads it with the reply. A save that does not land costs nothing: the words
+  // go out in the reply's own `feedback` either way, and the row says so.
+  saveNote(cx) {
+    const c = this.commenting;
+    if (!c) return;
+    const text = String(c.field?.value() ?? "").trim();
+    this.closeComment(cx);
+    if (!text) return;
+    const note = { id: noteId(), target: c.target, quote: c.quote, text, serverId: null, error: null };
+    this.notes.push(note);
+    cx?.notify();
+    cx?.spawn(async (cx) => {
+      try {
+        const out = await postNote(note);
+        note.serverId = String(out?.annotation?.id ?? note.id);
+      } catch (e) {
+        note.error = String(e?.message ?? e).split("\n")[0].slice(0, 140);
+      }
+      cx.notify();
+    });
+  }
+
+  // A staged comment put away: the Inbox's draft goes with it, so the page and the panel go
+  // on counting the same thing.
+  dropNote(id, cx) {
+    const i = this.notes.findIndex((n) => n.id === id);
+    if (i < 0) return;
+    const [note] = this.notes.splice(i, 1);
+    cx?.notify();
+    if (!note.serverId) return;
+    asked("POST", `annotations/${note.serverId}/remove`, {}).catch(() => {
+      // A remove that did not land leaves a draft in the Inbox, which its own page can drop;
+      // there is nothing to say about it here.
+    });
+  }
+
+  // One block of a message or of a document, wrapped so the pointer can find it: the bar and
+  // the field are drawn inside it, under the words they are about. The text is selectable,
+  // so the highlight is the person's own — the panel cannot read it, and does not need to:
+  // the block is what the comment is filed against, and its first line is the quote.
+  renderNoteBlock(key, block, target) {
+    const t = theme();
+    const bar = this.aiming?.key === key ? this.renderNoteBar() : null;
+    const box = this.commenting?.key === key ? this.renderNoteField() : null;
+    // The handlers are on the words as well as on the box around them: a press the text
+    // takes for its own selection still reaches the element that owns it, and `aimUp` is
+    // idempotent because both of them are asked.
+    return v_flex().id(`pl-blk-${key}`).w_full().flex_none().relative()
+      .on_mouse_down("left", (e) => this.aimDown(key, e))
+      .on_mouse_up("left", (e, cx) => this.aimUp(key, e, target, block, cx))
+      .child(TextView.markdown(`pl-md-${key}`, block).selectable()
+        .on_mouse_down("left", (e) => this.aimDown(key, e))
+        .on_mouse_up("left", (e, cx) => this.aimUp(key, e, target, block, cx)))
+      .when(Boolean(bar), (el) => el.child(bar))
+      .when(Boolean(box), (el) => el.child(box));
+  }
+
+  // The bar the pointer opens, where it let go: one word, because there is one thing to do
+  // with a highlight here. It never runs past the column's right edge — a button off the
+  // panel is a button nobody can press — and it is given its width, because an absolute
+  // element that hugs its text around here draws nothing at all.
+  renderNoteBar() {
+    const t = theme(), at = this.aiming?.at ?? { x: 0, y: 0 };
+    const wide = Number(this.size?.width) || 368;
+    const left = Math.max(0, Math.min(Number(at.x) || 0, Math.max(0, wide - 112)));
+    return h_flex().id("pl-note-bar").absolute().left(left).top((Number(at.y) || 0) + 6).w(112).h(24).px(8).gap(6)
+      .items_center().rounded(6).bg(t.popover).border_1().border_color(t.border)
+      .hover((s) => s.bg(t.hover)).cursor_pointer()
+      .on_mouse_down("left", (_e, cx) => cx.stop_propagation())
+      .on_click((_e, cx) => this.openComment(cx))
+      .child(svg(`${ICONS}/plus.svg`).size(11).flex_none().text_color(t.accent))
+      .child(div().text_size(11.5).text_color(t.foreground).child("Comment"));
+  }
+
+  // The comment being written: the quote it stands for, the field, and the one button that
+  // takes it. It draws under its block rather than over it — a box floating over the words
+  // would hide the very words the person is commenting on in a 368 px column.
+  renderNoteField() {
+    const t = theme(), c = this.commenting;
+    if (!c?.field) return null;
+    return v_flex().id("pl-note-box").w_full().flex_none().mt(3).mb(2).gap(5).p(7).rounded(7)
+      .bg(t.popover).border_1().border_color(t.accent)
+      .on_mouse_down("left", (_e, cx) => cx.stop_propagation())
+      .when(Boolean(c.quote), (el) => el.child(div().truncate().text_size(10.5).text_color(t.dim).child(c.quote)))
+      .child(div().w_full().child(Textarea.new(c.field)))
+      .child(h_flex().gap(6).items_center()
+        .child(div().flex_1().text_size(10.5).text_color(t.dim).child("Esc puts it away"))
+        .child(h_flex().id("pl-note-ok").h(22).flex_none().px(9).items_center().rounded(5)
+          .bg(t.solid).text_color(t.solid_foreground)
+          .hover((s) => s.bg(t.accent).text_color(t.accent_foreground))
+          .on_click((_e, cx) => this.saveNote(cx))
+          .child(div().text_size(11.5).child("Comment"))));
+  }
+
+  // A staged comment in the reply band: what it is about, then the words, then the one thing
+  // to do with it.
+  renderNote(n) {
+    const t = theme();
+    const where = [n.target?.file, n.quote].filter(Boolean).join(" · ");
+    return h_flex().id(`pl-note-${n.id}`).w_full().flex_none().gap(6).items_start().p(6).rounded(6)
+      .bg(t.background)
+      .child(svg(`${ICONS}/square-pen.svg`).size(11).flex_none().mt(1).text_color(t.dim))
+      .child(v_flex().flex_1().min_w(0).gap(1)
+        .when(Boolean(where), (el) => el.child(div().truncate().text_size(10.5).text_color(t.dim).child(where)))
+        .child(div().text_size(11.5).line_height(1.45).text_color(t.foreground).child(n.text))
+        .when(Boolean(n.error), (el) => el.child(div().text_size(10).text_color(t.blocked)
+          .child("The Inbox did not keep it; it still goes with your reply."))))
+      .child(div().id(`pl-note-x-${n.id}`).size(16).flex_none().flex().items_center().justify_center()
+        .rounded(4).hover((s) => s.bg(t.hover)).cursor_pointer()
+        .on_click((_e, cx) => this.dropNote(n.id, cx))
+        .child(svg(`${ICONS}/x.svg`).size(10).flex_none().text_color(t.dim)));
   }
 
   // ---- the files an agent attached ----
@@ -1417,6 +1722,15 @@ export default class Plannotator extends View {
       // that opens over it. The panel gets the keyboard on a click; Esc has nothing to
       // close there, so it is left to the app.
       .track_focus(this.handle).on_key_down((e, cx) => {
+        // A comment being offered or written is the first thing Esc puts away: the page behind
+        // it stays where it is.
+        if (e.key === "escape" && (this.commenting || this.aiming)) {
+          if (this.commenting) this.closeComment(cx);
+          this.aiming = null;
+          cx.stop_propagation();
+          cx.notify();
+          return;
+        }
         // The reply field has the keyboard: Esc still goes back, and every other key is
         // the caret's. A list highlight that moved on each arrow typed into a sentence,
         // and ran a row when the person meant a new line, would be unusable.
@@ -1912,7 +2226,16 @@ export default class Plannotator extends View {
     // Send with no messages behind it has nothing to answer.
     const words = String(this.draft?.value() ?? "").trim();
     const picks = this.unsentPicks(th);
-    const can = Boolean(words) || picks.length > 0;
+    // The comments made on this thread's words, on screen until the Send carries them; the
+    // ones made in the browser (or before this run of the panel) are in the Inbox's draft
+    // and not here, so the band counts those rather than pretending the draft is empty.
+    const notes = this.notes.filter((n) => n.text);
+    const elsewhere = Math.max(0, this.inboxComments - notes.length);
+    const carried = [
+      picks.length ? `${picks.length} ${picks.length === 1 ? "answer" : "answers"}` : null,
+      notes.length ? `${notes.length} ${notes.length === 1 ? "comment" : "comments"}` : null,
+    ].filter(Boolean).join(" and ");
+    const can = Boolean(words) || picks.length > 0 || notes.length > 0;
     const full = Boolean(th && this.draft) && lastAgentOf(messages) !== null;
     // The field *is* the band, not a box inside one. It used to be a bordered, rounded box
     // inset 12 px inside the footer, which put a frame around a frame at the bottom of every
@@ -1920,7 +2243,18 @@ export default class Plannotator extends View {
     // from the page, the same one the person's own messages are boxed in — and the rule above
     // it turns `accent` while they are in it, which is what the inner border used to say.
     const field = () => v_flex().id("pl-reply").flex_none().w_full().px(10).py(8).gap(6)
-      .bg(t.popover).border_t(1).border_color(this.writing ? t.accent : t.border)
+      .bg(t.popover).border_t(1)
+      // The rule above the field turns accent while the person is in it — and only then: a
+      // comment being written higher up the page has the keyboard, not this field.
+      .border_color(this.writing && !this.commenting ? t.accent : t.border)
+      // A comment made higher up the page is carried by this Send, so it is drawn here,
+      // where the Send is: the quote it stands for, its words, and the way to put it away.
+      .when(notes.length > 0, (el) => el.child(v_flex().w_full().flex_none().gap(4)
+        .children(notes.map((n) => this.renderNote(n)))))
+      .when(elsewhere > 0, (el) => el.child(div().text_size(10.5).text_color(t.dim)
+        .child(elsewhere === 1
+          ? "1 more comment is in this thread's draft in the Inbox"
+          : `${elsewhere} more comments are in this thread's draft in the Inbox`)))
       .child(h_flex().items_end().gap(8).w_full()
         .child(div().flex_1().min_w(0).child(Textarea.new(this.draft)))
         .child(h_flex().id("pl-send").h(26).flex_none().px(10).items_center().rounded(6)
@@ -1929,10 +2263,10 @@ export default class Plannotator extends View {
           .when(!can || Boolean(this.reply?.busy), (el) => el.bg(t.raised).text_color(t.dim))
           .on_click((_e, cx) => this.send(cx))
           .child(div().text_size(12).child(this.reply?.busy ? "Sending…" : "Send"))))
-      // What the Send is carrying besides words, so a pick made two cards up is not
-      // forgotten at the bottom of the page.
-      .when(picks.length > 0, (el) => el.child(div().text_size(11).text_color(t.accent)
-        .child(picks.length === 1 ? "1 answer goes with this reply" : `${picks.length} answers go with this reply`)))
+      // What the Send is carrying besides words, so a pick made two cards up — or a comment
+      // made on a paragraph — is not forgotten at the bottom of the page.
+      .when(carried !== "", (el) => el.child(div().text_size(11).text_color(t.accent)
+        .child(`${carried} ${picks.length + notes.length === 1 ? "goes" : "go"} with this reply`)))
       .when(Boolean(this.reply?.error), (el) => el.child(div().text_size(11.5).text_color(t.blocked).child(this.reply.error)));
     // Three rows: what the thread is, the conversation, the way to answer it. Only the
     // conversation scrolls — a project that scrolled away would leave the person reading
@@ -1982,10 +2316,19 @@ export default class Plannotator extends View {
     const root = this.opened?.thread?.project?.root;
     let drawn = 0;
     const boxes = [];
+    // An agent's words are what a comment goes on: the person's own are not something to
+    // write back to them about.
+    const noteable = m?.author?.kind !== "person";
+    const noteTarget = { kind: "message", messageId: m?.id };
     parts.forEach((part, i) => {
       if (part.type === "text") {
-        boxes.push(div().w_full().text_size(14).line_height(1.6)
-          .child(TextView.markdown(`pl-md-${m?.id}-${i}`, part.text)));
+        // A part is cut into its paragraphs, and each of those is one block the pointer can
+        // open a comment on: see `blocksOf` for why the block, not the selection.
+        const blocks = blocksOf(part.text);
+        boxes.push(v_flex().w_full().flex_none().gap(3).text_size(14).line_height(1.6)
+          .children(blocks.map((block, j) => (noteable
+            ? this.renderNoteBlock(`m-${m?.id}-${i}-${j}`, block, { ...noteTarget, blockId: `block-${j + 1}` })
+            : div().w_full().child(TextView.markdown(`pl-md-${m?.id}-${i}-${j}`, block))))));
         return;
       }
       const file = this.shots.get(pictureAt(part.url, root));
@@ -2166,7 +2509,26 @@ export default class Plannotator extends View {
       // page is only ever its source here: the Inbox renders the page itself, and a row
       // goes there.
       if (!asDocument(a)) {
+        // The `Editor` knows its lines but not where the pointer is in them, so a file has
+        // one way in rather than a block per paragraph: the whole file is the comment's
+        // anchor, which is the Inbox's own general comment.
+        const key = `file-${a.id}`;
+        const mine = this.notes.filter((n) => n.target?.attachmentId === a.id);
         return v_flex().id("pl-view-code").flex_1().min_h(0).w_full()
+          .child(h_flex().id("pl-note-add").h(22).flex_none().px(14).gap(6).items_center()
+            .hover((s) => s.bg(t.hover)).cursor_pointer()
+            .on_click((_e, cx) => this.openCommentOn(key, {
+              kind: "file", file: a.name ?? "this file", attachmentId: a.id,
+              // The copy the person is reading is the one the Inbox kept for the send, and
+              // that is the version its annotations are filed against.
+              version: a.sent_sha256 || "current", blockId: "",
+            }, "", cx))
+            .child(svg(`${ICONS}/plus.svg`).size(11).flex_none().text_color(t.dim))
+            .child(div().flex_none().text_size(11.5).text_color(t.muted).child("Comment on this file"))
+            .child(div().flex_1())
+            .when(mine.length > 0, (el) => el.child(div().flex_none().text_size(10.5).text_color(t.accent)
+              .child(mine.length === 1 ? "1 goes with your reply" : `${mine.length} go with your reply`))))
+          .when(this.commenting?.key === key, (el) => el.child(v_flex().px(12).pb(4).child(this.renderNoteField())))
           .when(a.kind === "html", (el) => el
             .child(div().flex_none().px(14).pt(6).text_size(11).text_color(t.dim)
               .child("A web page reads as its source here; the Inbox shows it as a page."))
@@ -2175,10 +2537,17 @@ export default class Plannotator extends View {
             .child(Editor.new(v.editor))));
       }
       // Markdown, the one kind the viewer draws: the person's own document, read as the
-      // thread's messages are.
+      // thread's messages are — and, like them, cut into the blocks a comment goes on.
+      const topic = {
+        kind: "file", file: a.name ?? "this file", attachmentId: a.id,
+        version: a.sent_sha256 || "current",
+      };
       return v_flex().id("pl-view-doc").flex_1().min_h(0).w_full().overflow_y_scrollbar().px(14).py(10)
         .child(v_flex().w_full().text_size(13.5).line_height(1.6)
-          .child(TextView.markdown(`pl-att-${a.id}`, v.text || "_(no words)_")));
+          .children(blocksOf(v.text || "").map((block, i) =>
+            this.renderNoteBlock(`a-${a.id}-${i}`, block, { ...topic, blockId: `block-${i + 1}` })))
+          .when(!v.text, (el) => el.child(div().w_full()
+            .child(TextView.markdown(`pl-att-${a.id}`, "_(no words)_")))));
     };
     return v_flex().id("pl-view").flex_1().min_h(0).w_full().max_w(760)
       .child(h_flex().id("pl-view-facts").h(24).flex_none().px(14).gap(6).items_center()

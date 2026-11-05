@@ -134,12 +134,12 @@ words at the size it was taken, with its name and size beneath it; every
 other file is a card the width of the column, the way the Inbox draws one: the
 kind's glyph in a square, the name over "Markdown · 1.2 KB", a chevron — and a
 count over them ("3 attachments") so they are not mistaken for the message's
-own words. A picture is a card too once it is clicked. Clicking either opens the file in the panel,
-read-only: a markdown document as the markdown it is, code and a patch in
-the code view — line numbers, its language, a scroll of its own — any other
-text the same way, a picture at the panel's width. Nothing there edits,
-downloads or uploads, and the back chevron (or Esc) returns to the thread
-it came in.
+own words. A picture is a card too once it is clicked. Clicking either opens
+the file in the panel, read-only: a markdown document as the markdown it is,
+code and a patch in the code view — line numbers, its language, a scroll of
+its own — any other text the same way, a picture at the panel's width.
+Nothing there edits, downloads or uploads except the comment you write on
+it, and the back chevron (or Esc) returns to the thread it came in.
 
 Pictures an agent writes *into* its words — `![alt](/tmp/shot.png)`, the
 path it just took — are drawn where it wrote them, between the paragraphs
@@ -162,6 +162,25 @@ attachment named by its hash; a picture written into the words lands in the
 same folder, named by its path. The copies are a cache, not an archive: a
 thread's folder is deleted when you leave the thread, and the whole folder
 is cleared when the panel starts.
+
+## Comments
+
+A comment needs no page. Drag across a paragraph of an agent's message and
+a **Comment** bar appears where you let go; the bar becomes a field under
+that paragraph — the highlighted line quoted above it, your words in it,
+and a Comment button. What it is filed against is the paragraph, so the
+quote is its first line: the panel cannot read your selection, and does not
+need to. A code file, which has no paragraphs to press, gets one row instead
+— **Comment on this file**, above the code view — and a markdown file takes
+a comment paragraph by paragraph, as a message does.
+
+Comment moves the words into the reply band at the bottom of the thread,
+with the line they are about and a ✕ to drop them, and saves them to the
+Inbox at once; the band counts them ("1 answer and 1 comment go with this
+reply"). Send carries them with the reply: the agent reads your words,
+then **Comment on your message:** (or on the file's name), the quoted line,
+and the comment. Esc puts an open field away, and a click is only a click —
+the bar wants a drag.
 
 ## Plannotator
 

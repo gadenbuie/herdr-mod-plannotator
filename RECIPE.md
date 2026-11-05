@@ -49,7 +49,10 @@ the tree — sticks to its space and comes back with it.
   an "Answer in the Inbox" row), the reply band pinned at the bottom (the
   field grows 2→8 rows, Send goes live for words or a picked answer, and
   the line under it says what the Send carries: "1 answer goes with this
-  reply"), and last an "Open in Inbox for picks and pictures" row. Pictures
+  reply", "1 answer and 1 comment"), and last an "Open in Inbox for picks
+  and pictures" row. A comment on the words sits in that band above the
+  field — the quote it stands for, its own words, and a ✕ — until the Send
+  carries it. Pictures
   written into the words are drawn where they were written — between the
   paragraphs that were either side of them, as a thumbnail no taller than
   240 px and no narrower than 130 — and a click opens the picture at its own
@@ -70,9 +73,16 @@ the tree — sticks to its space and comes back with it.
   is, and code, a patch and every other text file in the code view: line
   numbers, its language by extension, and a scroll of its own rather than
   the panel's. A picture is drawn at the panel's width. Read-only: nothing
-  here edits, downloads or uploads. A video is a row that plays it in the
+  here edits, downloads or uploads. The one write is a comment on the
+  file — a row above the code view, and for markdown a press-and-release in
+  a paragraph, as in a thread. A video is a row that plays it in the
   browser, and a web page is its source plus a row to the Inbox, which
   renders it; both say so.
+- **A comment, made**: a drag across a paragraph puts a "Comment" bar where
+  the pointer let go; the bar becomes a field under that paragraph — the
+  quote it stands for above it, the words in it, a Comment button and "Esc
+  puts it away" — and Comment files it in the band below, keeping the
+  paragraph for the person to go on reading.
 - **The palette** (520×340 at the pointer): a search line over six rows —
   Annotate the last message, Review my changes, Annotate all files,
   Annotate another folder…, Open the Inbox, Open Plannotator as a tab —
@@ -106,9 +116,10 @@ the tree — sticks to its space and comes back with it.
   the threads, "N more", the annotate rows, the Files toggle, every drawn
   tree row, "Another folder…", and in a thread the last row and the way
   back — so the highlight is always the row Return runs. The reply field
-  is the one exception: while the caret is in it, every key but Esc
-  belongs to the caret. The panel is not handed the keyboard when it
-  appears (that would pull it out of the terminal); a click into it hands
+  and a comment's field are the exceptions: while the caret is in one,
+  every key but Esc belongs to the caret, and Esc puts a comment away
+  before it leaves the thread. The panel is not handed the keyboard when
+  it appears (that would pull it out of the terminal); a click into it hands
   it over.
 - **The Inbox owns the list and the read state; the store is only the
   trigger.** `~/.plannotator/inbox/projects` is watched (`watchFolder`) for
@@ -136,8 +147,36 @@ the tree — sticks to its space and comes back with it.
   the agent wrote after what was drawn, the Inbox refuses with
   `thread_moved_on`: nothing sends, the words stay in the field, the
   thread re-reads to show what moved it. **This is the whole write
-  surface** — a cursor, an answer's draft, a reply. No resolve, upload,
-  tag, handoff or skip leaves the panel.
+  surface** — a cursor, an answer's draft, a reply, a comment. No resolve,
+  upload, tag, handoff or skip leaves the panel.
+- **A comment is filed on a block, because the panel cannot read a
+  highlight.** `TextView` and `EditorState` hand out no selection, and a
+  `copy` a mod dispatches moves nothing, so the words a comment is about
+  are the ones in the paragraph under the pointer: a press and release in
+  the same block with 4 px of travel between them (a click is a click)
+  opens the "Comment" bar, and the block's first line is the quote.
+  `blocksOf` cuts a message's markdown at its blank lines — a fence stays
+  whole — and every block is drawn as its own `TextView`, so a selection
+  cannot run across two paragraphs and the anchor is never guessed. The
+  code view has no blocks to press, so it has one row instead, "Comment on
+  this file", above the `Editor`: that one is a `GLOBAL_COMMENT`, the
+  Inbox's own general comment. Nothing else has to be true of the markdown
+  for this to hold: a block cut at a blank line renders as the same
+  markdown it did inside the whole.
+- **A comment is saved as it is made, and carries on the Send.** Comment
+  puts the words in the reply band — quote, words, ✕, and no other edit,
+  because the words are the band's to carry now — and POSTs the annotation
+  at once: `messages/<id>/annotations` for a message, `annotations` with
+  the attachment and its `sent_sha256` for a file. Those are the drafts the
+  Inbox's own page keeps, so its count and the panel's are the same number
+  (`row.unsent.comments`, less the ones on screen); the browser's page
+  draws them back as it draws any comment. The Send names them in
+  `annotation_ids` and renders them into the reply's `feedback`, which is
+  where the Inbox puts them in the message the agent reads — the agent gets
+  the words the person highlighted, not a separate record to go and find.
+  An id the Inbox does not know refuses the whole reply, so the reply goes
+  out again without `annotation_ids` and the words still arrive in
+  `feedback`. A reply that only comments is a reply.
 - **The files come from the Inbox, not from the path the agent named.** An
   attachment is a record — `id`, `name`, `kind` (markdown, text, code, html,
   image, video), `size`, its hash — and the file the agent pointed at is
@@ -154,7 +193,8 @@ the tree — sticks to its space and comes back with it.
   their rows. Pictures are pulled when a thread opens (once each, then kept)
   so a message can draw them; every other kind is read only when the person
   opens it. The files are read-only in both directions: the panel shows them
-  and sends nothing about them.
+  and sends nothing about their contents — the one thing it says about a
+  file is the comment the person writes on it.
 - **A picture written into the words is a path, not an attachment.** The
   agents write `![alt](/abs/a.png)`, or a name relative to the project the
   thread is about. `TextView` cannot load an image, so the picture is copied
@@ -347,6 +387,16 @@ the tree — sticks to its space and comes back with it.
   `:::question-multi` and `:::question-text`, so `wordsWithoutQuestions`
   matches all three — one that matched the bare fence only drew the whole
   block twice: as plain markdown above the card, and as the card.
+- **An `absolute()` element that hugs its text draws nothing.** The
+  Comment bar came out as empty space until it was given `.w(112)`: a
+  positioned box with no width resolves to zero, and nothing in the app
+  complains. Give a floating element its width, and keep it inside the
+  column with the panel's own `size`.
+- **The panel cannot read a selection.** `selectable()` makes the words
+  selectable for the person and reports nothing back; `on_mouse_down` and
+  `on_mouse_up` on a `TextView` report a position, which is all the
+  comment's anchor is — the block, and the pointer's place on it. Do not
+  build anything that needs the highlighted characters themselves.
 
 ## Done when
 
@@ -364,6 +414,18 @@ the tree — sticks to its space and comes back with it.
 - A pick fills its ring, the card reads "Picked, not sent", the band says
   "1 answer goes with this reply", Send settles the card and posts the
   words — and the same draft is visible in the browser.
+- A drag across a paragraph in an agent's message opens a Comment bar at
+  the pointer; Comment under it takes the words and the band says
+  "1 comment goes with this reply"; Send settles it, and the reply the
+  agent reads has the person's words, then the quoted line and the
+  comment. The Inbox's own page shows the same comment on the message, and
+  its count is gone from `row.unsent.comments` once the reply is sent.
+  Esc puts the field away without a comment, a click opens nothing, and a
+  drag in another block meanwhile does not throw the field's words away.
+- A file's page has "Comment on this file": the comment is a
+  `GLOBAL_COMMENT` on the attachment's sent version, and it carries on the
+  next Send the same way. A markdown file's paragraphs take a comment
+  like a message's do.
 - A reply under words the person never saw is refused with the Inbox's
   own sentence, the words stay, and the thread re-reads to show what
   moved it.
