@@ -50,14 +50,15 @@ the tree — sticks to its space and comes back with it.
   field grows 2→8 rows, Send goes live for words or a picked answer, and
   the line under it says what the Send carries: "1 answer goes with this
   reply"), and last an "Open in Inbox for picks and pictures" row. Pictures
-  written into the words are drawn under them at the panel's width, one after
-  another, in the order the agent wrote them, and a click opens the thread in
-  the Inbox where the browser can show them taken size; the files an agent
-  attached are the message's own: a picture drawn under the words with its
-  name and size beneath it, and every other file a row — its kind's glyph, its
-  name, its size. A click on either opens the file. A picture whose path is
-  not a file any more is counted instead, and the count leads to the Inbox.
-  A refused send says why in the Inbox's own sentence.
+  written into the words are drawn where they were written — between the
+  paragraphs that were either side of them, as a thumbnail no taller than
+  240 px and no narrower than 130 — and a click opens the picture at its own
+  size in a dialog over the window; the files an agent attached are the
+  message's own: a picture drawn under the words with its name and size
+  beneath it, and every other file a row — its kind's glyph, its name, its
+  size. A click on either opens the file. A picture whose path is not a file
+  any more is counted instead, and the count leads to the Inbox. A refused
+  send says why in the Inbox's own sentence.
 - **A file, opened**, is a page of its own under the thread: the header is
   the back chevron and the file's name, a `dim` row under it says what kind
   of file it is, how big, and for a picture or a film its size in pixels and
@@ -149,14 +150,19 @@ the tree — sticks to its space and comes back with it.
   and sends nothing about them.
 - **A picture written into the words is a path, not an attachment.** The
   agents write `![alt](/abs/a.png)`, or a name relative to the project the
-  thread is about, so the panel copies the file itself into the same folder
-  (`<cksum of the path>.<ext>`) and drops it into the markdown: `TextView`
-  cannot load an image, and the words lose the picture they were written
-  around. That copy can go stale where an attachment's cannot — the path is
-  a file the agent may write again — so a copy older than its source is
-  replaced (`[ "$src" -nt "$dest" ]`). A path that is gone stays a count
-  under the words, and the count goes to the Inbox's own page, which has the
-  picture if anything does.
+  thread is about. `TextView` cannot load an image, so the picture is copied
+  into the app's folder (`<cksum of the path>.<ext>`) and the message is
+  drawn in pieces: the markdown between one picture and the next, and the
+  picture between them, which is where the agent wrote it. `COPY` also says
+  how many pixels the file is — `sips` where it exists, `file` after that —
+  because `image()` cannot be asked, and without it a portrait screenshot at
+  the panel's width is a column of screen: 240 px of height and 130 px of
+  width is the thumbnail, and the dialog is the rest. That copy can go stale
+  where an attachment's cannot — the path is a file the agent may write
+  again — so a copy older than its source is replaced (`[ "$src" -nt
+  "$dest" ]`). A path that is gone stays a count under the words, and the
+  count goes to the Inbox's own page, which has the picture if anything
+  does.
 - **The rest of an answer is a page away.** "Open in Inbox for picks and
   pictures" (and the header's page button) opens the Inbox at
   `#thread=<id>` through `plannotator inbox --background`, which prints the

@@ -140,11 +140,13 @@ downloads or uploads, and the back chevron (or Esc) returns to the thread
 it came in.
 
 Pictures an agent writes *into* its words — `![alt](/tmp/shot.png)`, the
-path it just took — are drawn under them too, one after another in the
-order they were written, and a click opens the thread in the Inbox where
-the browser shows them at full size. The panel copies those files itself,
-so it shows the picture as the agent left it; when the path is not a file
-any more, a count takes its place under the words and leads to the Inbox.
+path it just took — are drawn where it wrote them, between the paragraphs
+either side, as a thumbnail: never taller than 240 px and never narrower
+than 130, so a portrait screenshot stays a picture rather than a column of
+screen. Clicking one opens it at its own size in a dialog over the window,
+closed with Esc or its cross. The panel copies those files itself, so it
+shows the picture as the agent left it; when the path is not a file any
+more, a count takes its place under the words and leads to the Inbox.
 
 Two kinds the panel cannot show, and does not pretend to: a video opens in
 the browser where the Inbox's own player has it, and a web page shows its

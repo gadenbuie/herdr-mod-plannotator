@@ -41,6 +41,10 @@ const OWN = "mods/plannotator";
 // so a path in the person's home draws nothing at all — and the path an agent named is
 // usually gone by the time the person reads the thread anyway.
 const ATT = () => `${appHome()}/data/plannotator/att`;
+// How tall a picture may be where it sits in a message: a screenshot reads as a screenshot,
+// and the click opens it at its own size. A portrait one at the panel's full width would be
+// a column of screen the words never asked for.
+const PICTURE_CAP = 240;
 // The Inbox's store: one folder per project, one JSON record per line. It is watched for
 // changes; the list itself is asked of the Inbox server (see `READ`).
 const STORE = () => `${home()}/.plannotator/inbox`;
@@ -98,8 +102,9 @@ printf '{"error":"%s"}' "$(printf '%s' "$msg" | tr -d '"')"
 // A picture an agent wrote into its message, copied where the panel can draw it: `$1` is
 // the path the agent named, `$2` the folder to copy it into, and the name it lands under
 // is made from that path. Unlike an attachment this copy can go stale — the path is a
-// file the agent may write again — so a copy older than its source is replaced, and the
-// page prints the path it wrote for the caller to hand to `image()`.
+// file the agent may write again — so a copy older than its source is replaced. It also
+// says how big the picture is, in pixels: the panel draws a small one in a message and
+// hands the full size to the click that opens it, and `image()` cannot be asked.
 const COPY = `
 src="$1"
 dir="$2"
@@ -115,7 +120,13 @@ if [ ! -f "$dest" ] || [ "$src" -nt "$dest" ]; then
   mkdir -p "$dir" 2>/dev/null
   cp "$src" "$dest" 2>/dev/null || { printf '{"error":"copy"}'; exit 0; }
 fi
-printf '{"ok":1,"file":"%s"}' "$dest"
+wh=""
+command -v sips >/dev/null 2>&1 && wh=$(sips -g pixelWidth -g pixelHeight "$src" 2>/dev/null | awk '/pixelWidth/ && $2 ~ /^[0-9]+$/ {w=$2} /pixelHeight/ && $2 ~ /^[0-9]+$/ {h=$2} END{if (w && h) print w" "h}')
+[ -n "$wh" ] || wh=$(file -b "$src" 2>/dev/null | sed -n 's/.*[ ,]\\([0-9][0-9]*\\) *x *\\([0-9][0-9]*\\).*/\\1 \\2/p')
+w=\${wh%% *}; h=\${wh##* }
+[ -n "$w" ] || w=0
+[ -n "$h" ] || h=0
+printf '{"ok":1,"file":"%s","w":%s,"h":%s}' "$dest" "$w" "$h"
 `;
 // The Inbox in the person's browser, on one page of it: `$1` is the page's own hash
 // route — `thread=<id>`, or empty for the list — or, when it starts with `/`, one of
@@ -389,7 +400,8 @@ function lastAgentOf(messages) {
   return null;
 }
 
-// A message's words, as the panel can draw them, and the pictures it wrote into them.
+// A message's words, as the panel can draw them, in the order the agent wrote them: the
+// markdown between one picture and the next, and each picture where it was written.
 //
 // The agents write in markdown, and `TextView` renders it — lists, tables and code
 // included — so only the two things it cannot do come off. `:::question` and
@@ -397,21 +409,29 @@ function lastAgentOf(messages) {
 // but the words are the agent's, and the `- [ ]` choices and `Recommended:` line read
 // as what was asked. A picture is a path in the person's own files
 // (`![alt](/abs/a.png)`, or one relative to the project), which `TextView` cannot load:
-// it comes off the words and is drawn under them instead, pulled off the disk the way
-// an attachment is. Its alt text goes with it — the Inbox names those files
-// (`pasted-image-2026-11-03-1452`), so a sentence with two pictures in it would carry
-// two filenames through the middle of it.
+// it is drawn where it stands instead, as a thumbnail the click opens, and the words on
+// either side of it are drawn as the markdown they are. Its alt text goes with it — the
+// Inbox names those files (`pasted-image-2026-11-03-1452`), so a sentence with two
+// pictures in it would carry two filenames through the middle of it.
 function wordsOf(body) {
-  const pictures = [];
-  const text = String(body ?? "")
-    .replace(/^:::[a-z-]*[^\n]*$/gm, "")
-    .replace(/!\[([^\]]*)\]\(([^)\s]*)\)/g, (_all, alt, url) => {
-      if (url) pictures.push({ alt: String(alt ?? "").trim(), url });
-      return "";
-    })
-    .replace(/\n{3,}/g, "\n\n")
-    .trim();
-  return { text, pictures };
+  const text = String(body ?? "").replace(/^:::[a-z-]*[^\n]*$/gm, "");
+  const parts = [];
+  let pictures = 0;
+  let at = 0;
+  const re = /!\[([^\]]*)\]\(([^)\s]*)\)/g;
+  for (let m = re.exec(text); m; m = re.exec(text)) {
+    const words = text.slice(at, m.index).replace(/\n{3,}/g, "\n\n").trim();
+    if (words) parts.push({ type: "text", text: words });
+    at = m.index + m[0].length;
+    // A picture with no path is a picture the panel cannot go and get: it comes off the
+    // words and is not counted, because there is nowhere to send the person for it.
+    if (!m[2]) continue;
+    pictures += 1;
+    parts.push({ type: "picture", alt: String(m[1] ?? "").trim(), url: m[2] });
+  }
+  const rest = text.slice(at).replace(/\n{3,}/g, "\n\n").trim();
+  if (rest) parts.push({ type: "text", text: rest });
+  return { parts, pictures };
 }
 
 // Where an inline picture is on disk: the path the agent wrote, absolute or relative to
@@ -820,7 +840,14 @@ export default class Plannotator extends View {
     }
     if (!out?.ok || !out?.file) throw new Error(String(out?.error ?? "copy"));
     const dest = String(out.file);
-    return { abs: dest, rel: dest.slice(appHome().length + 1) };
+    return {
+      abs: dest,
+      rel: dest.slice(appHome().length + 1),
+      // The picture's own pixels, so the message can draw a thumbnail and the click can
+      // open it at the size it was taken. 0 when the file would not say.
+      width: Number(out.w) || 0,
+      height: Number(out.h) || 0,
+    };
   }
 
   // The pictures a thread carries, read once each so its messages can draw them: the files
@@ -837,8 +864,9 @@ export default class Plannotator extends View {
         this.readingFiles.add(a.id);
         want.push(a);
       }
-      for (const p of wordsOf(m?.body).pictures) {
-        const abs = pictureAt(p.url, root);
+      for (const part of wordsOf(m?.body).parts) {
+        if (part.type !== "picture") continue;
+        const abs = pictureAt(part.url, root);
         if (!abs || this.shots.has(abs) || this.readingShots.has(abs)) continue;
         this.readingShots.add(abs);
         shots.push(abs);
@@ -928,12 +956,39 @@ export default class Plannotator extends View {
   // How wide a picture is drawn: its own width, never past the panel's column, and — in a
   // message, where the words are the point — never more than `cap` pixels tall. `image()`
   // stretches to the box it is given, so the box is the file's own shape scaled down.
-  pictureWidth(a, cap = 200) {
+  pictureWidth(a, cap = PICTURE_CAP) {
     const column = Math.max(160, (Number(this.size?.width) || 380) - 56);
     const w = Number(a.width) || 0, h = Number(a.height) || 0;
     let px = Math.min(column, w || column);
-    if (cap && w > 0 && h > 0) px = Math.min(px, Math.round((cap * w) / h));
+    // A picture taller than it is wide is capped by its height — a portrait screenshot at the
+    // panel's width is a column of screen the words never asked for — but the cap alone
+    // makes a 480×1070 one 98 px wide, no longer a picture of anything: a floor on the
+    // width takes the height back up to about 290, and the click opens the rest.
+    if (cap && w > 0 && h > 0) {
+      px = Math.min(column, Math.max(130, Math.min(px, Math.round((cap * w) / h))));
+    }
     return Math.max(64, Math.round(px));
+  }
+
+  // A picture as big as it is, on the window's own screen: a dialog the person closes with
+  // Esc or its cross. The panel's column is 368 px, which makes a full screenshot a stamp —
+  // so the thumbnail is the way in and this is the way to read it. No bigger than 820×560 —
+  // the window is 705 px tall, and a dialog taller than that is a dialog with its picture
+  // cut off — shrunk to fit when the picture is larger.
+  openPicture(shot) {
+    const rel = String(shot?.rel ?? "");
+    if (!rel) return null;
+    const w = Number(shot?.width) || 0, h = Number(shot?.height) || 0;
+    const fit = w > 0 && h > 0 ? Math.min(1, 820 / w, 560 / h) : 1;
+    const dw = w > 0 ? Math.round(w * fit) : 720;
+    const dh = h > 0 ? Math.round(h * fit) : 480;
+    return openOverlay({
+      mod: "plannotator",
+      kind: "dialog",
+      width: dw + 24,
+      height: dh + 56,
+      props: { mode: "picture", file: rel, name: String(shot?.name ?? ""), w: dw, h: dh },
+    });
   }
 
   // ---- the state that sticks to the space ----
@@ -1877,14 +1932,30 @@ export default class Plannotator extends View {
   renderMessage(m) {
     const t = theme(), mine = m?.author?.kind === "person";
     const asked = Array.isArray(m?.questions) ? m.questions : [];
-    const { text, pictures } = wordsOf(asked.length ? wordsWithoutQuestions(m?.body) : m?.body);
-    // The pictures in the words, each one drawn where it was written when its file could be
-    // copied; the rest are counted, and the count leads to the Inbox's own page.
+    const { parts, pictures } = wordsOf(asked.length ? wordsWithoutQuestions(m?.body) : m?.body);
+    // The words and the pictures in the order they were written: a message that says "before,
+    // then after" draws both where the agent wrote them. A picture whose file could not be
+    // copied is not drawn, and the count at the end of the message says how many there were.
     const root = this.opened?.thread?.project?.root;
-    const drawn = pictures
-      .map((p, i) => ({ ...p, i, file: this.shots.get(pictureAt(p.url, root)) }))
-      .filter((p) => p.file?.rel);
-    const missed = pictures.length - drawn.length;
+    let drawn = 0;
+    const boxes = [];
+    parts.forEach((part, i) => {
+      if (part.type === "text") {
+        boxes.push(div().w_full().text_size(14).line_height(1.6)
+          .child(TextView.markdown(`pl-md-${m?.id}-${i}`, part.text)));
+        return;
+      }
+      const file = this.shots.get(pictureAt(part.url, root));
+      if (!file?.rel) return;
+      drawn += 1;
+      boxes.push(this.renderInline(m, { ...part, i, file }));
+    });
+    const missed = Math.max(0, pictures - drawn);
+    // A message that is only a question is the question's card, not "no words" above it.
+    if (boxes.length === 0 && asked.length === 0) {
+      boxes.push(div().w_full().text_size(14).line_height(1.6)
+        .child(TextView.markdown(`pl-md-${m?.id}`, "_(no words)_")));
+    }
     const at = Date.parse(m?.created_at);
     // The files the agent sent with its words: a picture is drawn where it can be seen,
     // everything else is a row. An attachment is often the thing the message is about, so
@@ -1906,18 +1977,11 @@ export default class Plannotator extends View {
       // one thing on this page meant to be read at length. `TextView`'s markdown takes
       // both from the box around it — and `line_height` takes a bare number as a multiple
       // of the size, not pixels: `line_height(21)` is twenty-one times the text, which is
-      // a page of blank lines, not a looser one.
-      .child(div().w_full().text_size(14).line_height(1.6)
-        // A message that is only a question is the question's card, not "no words" above it.
-      .when(Boolean(text) || asked.length === 0, (el) => el
-        .child(div().w_full().text_size(14).line_height(1.6)
-          .child(TextView.markdown(`pl-md-${m?.id}`, text || "_(no words)_"))))
-      // A picture belongs to the words it was written under, so it is drawn there — above
-      // the question cards, which are the last thing the agent said — and the files the
-      // message came with follow both.
-      .when(drawn.length > 0, (el) => el.child(v_flex().w_full().flex_none().gap(6).pt(2)
-        .children(drawn.map((p) => this.renderInline(m, p)))))
-      .children(asked.map((q) => this.renderQuestion(m, q))))
+      // a page of blank lines, not a looser one. The words come in pieces — the markdown
+      // between one picture and the next — so a message with two screenshots in it reads
+      // as the agent wrote it, and the question cards follow the lot.
+      .children(boxes)
+      .children(asked.map((q) => this.renderQuestion(m, q)))
       .when(atts.length > 0, (el) => el.child(v_flex().w_full().flex_none().gap(4).pt(2)
         .when(pics.length > 0, (s) => s.child(h_flex().gap(6).flex_wrap().items_start()
           .children(pics.map((a) => this.renderPicture(a)))))
@@ -1941,10 +2005,19 @@ export default class Plannotator extends View {
   // A picture an agent wrote into its message: drawn at the panel's width — `image()`
   // keeps the file's own shape when only its width is given — and a click opens the
   // thread in the Inbox, where the browser can show it the size it was taken.
+  // A picture an agent wrote into its message: a thumbnail at the panel's width, no taller
+  // than `PICTURE_CAP`, and a click that opens it at the size it was taken. A portrait
+  // screenshot — and agents take a lot of those — is a stamp here rather than a column of
+  // screen it never earned.
   renderInline(m, p) {
-    return v_flex().id(`pl-in-${m?.id}-${p.i}`).w_full().flex_none().items_start()
-      .child(image(p.file.rel).w(this.pictureWidth({}, null)).rounded(6).cursor_pointer()
-        .on_click(() => this.respond()));
+    return v_flex().id(`pl-in-${m?.id}-${p.i}`).flex_none().items_start()
+      .child(image(p.file.rel).w(this.pictureWidth(p.file, PICTURE_CAP)).rounded(6).cursor_pointer()
+        .on_click(() => this.openPicture({
+          rel: p.file.rel,
+          name: p.alt,
+          width: p.file.width,
+          height: p.file.height,
+        })));
   }
 
   // One file an agent attached: the glyph its kind wears, its name, its size, and a click
@@ -1967,7 +2040,7 @@ export default class Plannotator extends View {
     const t = theme(), file = this.files.get(a.id);
     if (!file) return this.renderChip(a);
     return v_flex().id(`pl-pic-${a.id}`).flex_none().gap(3).cursor_pointer()
-      .on_click((_e, cx) => this.openAttachment(a, cx))
+      .on_click(() => this.openPicture({ rel: file.rel, name: a.name, width: a.width, height: a.height }))
       .child(image(file.rel).w(this.pictureWidth(a)).rounded(6))
       .child(div().text_size(10.5).text_color(t.accent).truncate()
         .child(`${a.name ?? "picture"} · ${sizeOf(a.size)}`));
@@ -2020,7 +2093,9 @@ export default class Plannotator extends View {
           .items_center().gap(8)
           .when(Boolean(v.file), (el) => el
             .child(image(v.file.rel).w(this.pictureWidth(a, null)).rounded(6).cursor_pointer()
-              .on_click(() => openInbox(`/api/inbox/attachments/${a.id}/image`)))
+              .on_click(() => this.openPicture({
+                rel: v.file.rel, name: a.name, width: a.width, height: a.height,
+              })))
             .child(row("Open full size in the browser", `/api/inbox/attachments/${a.id}/image`,
               `${OWN}/image.svg`)));
       }
@@ -2080,6 +2155,29 @@ export default class Plannotator extends View {
   render(cx) {
     if (this.mode === "palette") return this.renderPalette();
     if (this.mode === "menu") return this.renderMenu();
+    if (this.mode === "picture") return this.renderPicturePage();
     return this.renderPanel(cx);
+  }
+
+  // A picture at its own size, in a dialog the panel opened: the name it was sent under, the
+  // way out (Esc closes a dialog by itself; the cross is for the pointer), and the picture.
+  // `image()` keeps the file's shape when only its width is set, which is why the width is
+  // all it is given — the height came from the file and sized the dialog.
+  renderPicturePage() {
+    const t = theme(), p = props() ?? {};
+    const file = String(p.file ?? ""), name = String(p.name ?? "");
+    const w = Number(p.w) || 720;
+    return v_flex().id("pl-picture").w_full().h_full().bg(t.popover).gap(8).p(12)
+      .child(h_flex().flex_none().gap(8).items_center()
+        .child(svg(`${OWN}/image.svg`).size(13).flex_none().text_color(t.muted))
+        .child(div().flex_1().min_w(0).truncate().text_size(12).text_color(t.muted)
+          .child(name || "Picture"))
+        .child(div().flex_none().text_size(11).text_color(t.dim).child("Esc"))
+        .child(h_flex().id("pl-picture-x").size(18).flex_none().items_center().justify_center()
+          .rounded(4).hover((s) => s.bg(t.hover)).cursor_pointer()
+          .on_click(() => this.close())
+          .child(svg(`${ICONS}/x.svg`).size(12).flex_none().text_color(t.muted))))
+      .child(v_flex().flex_1().min_h(0).w_full().items_center().justify_center()
+        .child(image(file).w(w).rounded(6)));
   }
 }
