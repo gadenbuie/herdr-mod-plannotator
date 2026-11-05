@@ -397,8 +397,13 @@ the tree — sticks to its space and comes back with it.
   API belongs to `v_virtual_list`, whose renderer throws on clicks — and
   question cards are made of clicks. So ↑/↓ can move the highlight past
   the fold of a long tree, and the thread page is *arranged* to open at
-  its end instead: the last three messages drawn, the rest behind a count
-  row, no question ever among the hidden ones.
+  its end instead: the last few messages drawn, the rest behind a count
+  row, no question ever among the hidden ones. "Few" is `tailOf`: three
+  messages when their words are short, one when the newest message's own
+  words run past `TAIL_ROOM` (1,400 characters of body, about the column
+  between the header and the reply field), because three long messages
+  push the newest under the fold and opening a thread has to land on what
+  was just written.
 - **`surface` resolves to the same colour as `background` in this
   palette** — box the person's messages in `popover` instead. `theme()`
   reports the resolved tokens; read it before trusting a token's name.

@@ -223,6 +223,11 @@ let claimed = 0;
 // How many waiting threads the panel lists; the rest are one row into the Inbox.
 const SHOWN = 5;
 
+// At most this many of a thread's last messages are drawn before the row that holds the rest,
+// and at most this many characters of them: see `tailOf`.
+const TAIL = 3;
+const TAIL_ROOM = 1400;
+
 // Where this space is now: its focused pane's folder, else where it was made.
 function folderOf(space) {
   const f = focused();
@@ -506,6 +511,31 @@ function wordsOf(body) {
   const rest = text.slice(at).replace(/\n{3,}/g, "\n\n").trim();
   if (rest) parts.push({ type: "text", text: rest });
   return { parts, pictures };
+}
+
+// How many of a thread's last messages the panel draws: three when they are short, which is
+// the context a thread reads easier with, and fewer — one, at the end of it — when the newest
+// message's own words outrun the column, because three long ones push the newest under the
+// fold and opening a thread has to land on what was just written. Counted from the records
+// rather than measured: a render cannot ask a text how tall it will be, and `TAIL_ROOM`
+// characters of body is about what fits between the header and the reply field at 368 px.
+// A message is weighted with what it draws besides its words — a picture is tall, a question
+// card is a row and a field — and the newest is always drawn, however short the room left.
+function tailOf(messages) {
+  const cost = (m) => {
+    const files = (Array.isArray(m?.attachments) ? m.attachments : []).length;
+    const cards = (Array.isArray(m?.questions) ? m.questions : []).length;
+    return String(m?.body ?? "").length + files * 240 + cards * 120;
+  };
+  let keep = 0;
+  let room = TAIL_ROOM;
+  for (let i = messages.length - 1; i >= 0 && keep < TAIL; i -= 1) {
+    const c = cost(messages[i]);
+    if (keep > 0 && c > room) break;
+    room = Math.max(0, room - c);
+    keep += 1;
+  }
+  return keep;
 }
 
 // Where an inline picture is on disk: the path the agent wrote, absolute or relative to
@@ -2479,7 +2509,7 @@ export default class Plannotator extends View {
     // hold the click handlers a question card is made of — so the page is arranged to start
     // at the newest rather than scrolled there: the last few messages are drawn, and the
     // rest wait behind one row. `showAll` is the row's doing, and `openThread` clears it.
-    const keep = 3;
+    const keep = tailOf(messages);
     let cut = this.showAll ? 0 : Math.max(0, messages.length - keep);
     // A question nobody has answered is never the thing behind the row: opening a thread is
     // how the person finds out what it is waiting on.
