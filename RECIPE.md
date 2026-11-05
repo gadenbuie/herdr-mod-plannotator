@@ -78,14 +78,15 @@ the tree — sticks to its space and comes back with it.
   a paragraph, as in a thread. A video is a row that plays it in the
   browser, and a web page is its source plus a row to the Inbox, which
   renders it; both say so.
-- **A comment, made**: a drag across a paragraph puts a "Comment" bar where
-  the pointer let go — and a drag that starts in one paragraph and ends in
-  the next puts it at the start of the drag, on the paragraph it started
-  in — the bar becomes a field under that paragraph (the quote it stands
-  for above it, the words in it, Cancel and Comment), and Comment files it
-  in the band below, keeping the paragraph for the person to go on
-  reading. A click anywhere else is a highlight put away, and the bar goes
-  with it.
+- **A comment, made**: a drag across a paragraph opens a "Comment" bar over
+  the line the drag started on — above it, or under it when that is the
+  paragraph's first line and there is no room above — and a drag that
+  starts in one paragraph and ends in the next is a comment on the one it
+  started in, with the bar at its start. The bar becomes a field under that
+  paragraph (the quote it stands for above it, the words in it, Cancel and
+  Comment), and Comment files it in the band below, keeping the paragraph
+  for the person to go on reading. A click anywhere else is a highlight put
+  away, and the bar goes with it.
 - **The palette** (520×340 at the pointer): a search line over six rows —
   Annotate the last message, Review my changes, Annotate all files,
   Annotate another folder…, Open the Inbox, Open Plannotator as a tab —

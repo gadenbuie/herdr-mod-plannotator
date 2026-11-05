@@ -166,7 +166,9 @@ is cleared when the panel starts.
 ## Comments
 
 A comment needs no page. Drag across a paragraph of an agent's message and
-a **Comment** bar appears where you let go; the bar becomes a field under
+a **Comment** bar appears over the line you started on, near the start of
+the highlight (under it if that is the paragraph's first line); the bar
+becomes a field under
 that paragraph — the highlighted line quoted above it, your words in it,
 and Cancel and Comment buttons. Click anywhere else and the bar goes, the
 way the highlight does. What it is filed against is the paragraph, so the

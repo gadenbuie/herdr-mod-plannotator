@@ -971,8 +971,8 @@ export default class Plannotator extends View {
 
   // The bar, from the drag that ended here. A highlight can start in one paragraph and run
   // into the next, and the panel cannot see it at all (`blocksOf` says why) — so the comment
-  // goes on the paragraph the drag started in, and the bar is drawn there, at the point the
-  // selection began. Same paragraph: the bar appears where the pointer let go.
+  // goes on the paragraph the drag started in, and the bar is drawn at the point the drag
+  // started. The press names both; the release only says there was a drag.
   aimUp(key, e, cx) {
     const down = this.pressed;
     this.pressed = null;
@@ -983,11 +983,7 @@ export default class Plannotator extends View {
     // typed in would throw those words away to offer a second bar, and Esc is already the
     // way to leave one.
     if (this.commenting) return;
-    const at = down.key === key ? (e?.local_position ?? down.at) : down.at;
-    this.aiming = {
-      key: down.key, target: down.target, block: down.block,
-      at: { x: Number(at?.x) || 0, y: Number(at?.y) || 0 },
-    };
+    this.aiming = { key: down.key, target: down.target, block: down.block, at: down.at };
     cx?.notify();
   }
 
@@ -1097,15 +1093,22 @@ export default class Plannotator extends View {
       .when(Boolean(box), (el) => el.child(box));
   }
 
-  // The bar the pointer opens, where it let go: one word, because there is one thing to do
-  // with a highlight here. It never runs past the column's right edge — a button off the
-  // panel is a button nobody can press — and it is given its width, because an absolute
-  // element that hugs its text around here draws nothing at all.
+  // The bar the pointer opens, over the line the drag started on: one word, because there is
+  // one thing to do with a highlight here. Over rather than under, because the words under a
+  // highlight are the ones the person is reading; under it when that line is the block's
+  // first and there is no room above — a bar above the first line would sit outside the
+  // paragraph and be clipped by whatever clips it. It never runs past the column's right
+  // edge either — a button off the panel is a button nobody can press — and it is given its
+  // width, because an absolute element that hugs its text around here draws nothing at all.
   renderNoteBar() {
     const t = theme(), at = this.aiming?.at ?? { x: 0, y: 0 };
     const wide = Number(this.size?.width) || 368;
     const left = Math.max(0, Math.min(Number(at.x) || 0, Math.max(0, wide - 112)));
-    return h_flex().id("pl-note-bar").absolute().left(left).top((Number(at.y) || 0) + 6).w(112).h(24).px(8).gap(6)
+    const y = Number(at.y) || 0;
+    // 24 px of bar and 4 px of air: above the line when the line is far enough down its
+    // paragraph for that to stay inside it.
+    const top = y >= 28 ? y - 28 : y + 6;
+    return h_flex().id("pl-note-bar").absolute().left(left).top(top).w(112).h(24).px(8).gap(6)
       .items_center().rounded(6).bg(t.popover).border_1().border_color(t.border)
       .hover((s) => s.bg(t.hover)).cursor_pointer()
       .on_mouse_down("left", (_e, cx) => cx.stop_propagation())
