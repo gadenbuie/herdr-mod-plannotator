@@ -56,6 +56,9 @@ printf '{"ok":1}'
 // and the click opens it at its own size. A portrait one at the panel's full width would be
 // a column of screen the words never asked for.
 const PICTURE_CAP = 240;
+// The comment bar's width: an `absolute()` element with no width draws nothing, so the
+// three buttons and their padding are sized here and clamped against the column with it.
+const BAR_W = 148;
 // The Inbox's store: one folder per project, one JSON record per line. It is watched for
 // changes; the list itself is asked of the Inbox server (see `READ`).
 const STORE = () => `${home()}/.plannotator/inbox`;
@@ -1038,17 +1041,18 @@ export default class Plannotator extends View {
     cx?.notify();
   }
 
-  // The bar, become the field.
-  openComment(cx) {
+  // The bar, become the field. A quick one arrives with its words already in it — the person
+  // adjusts them or presses Comment, and nothing is filed until they do.
+  openComment(cx, words = "") {
     const a = this.aiming;
     if (!a) return;
     this.aiming = null;
-    this.openCommentOn(a.key, a.target, a.block, cx);
+    this.openCommentOn(a.key, a.target, a.block, cx, words);
   }
 
   // The field for a comment on one block — or on a whole file, which has no block to press
   // in: the code view is the `Editor`'s, and the row under the facts is its way in.
-  openCommentOn(key, target, block, cx) {
+  openCommentOn(key, target, block, cx, words = "") {
     this.closeComment(cx);
     const field = TextareaState.new({ placeholder: "What about it?" });
     field.set_auto_grow(3, 6);
@@ -1059,10 +1063,13 @@ export default class Plannotator extends View {
     this.pressed = null;
     cx?.notify();
     // The caret goes in once the frame that draws the field is there: a field made and
-    // focused in the same call has nowhere to put one yet.
+    // focused in the same call has nowhere to put one yet, and the words a quick button
+    // brought land with it.
     cx?.spawn(async (cx) => {
       await cx.sleep(30);
-      if (this.commenting?.field === field) field.focus();
+      if (this.commenting?.field !== field) return;
+      if (words) field.set_value(words);
+      field.focus();
       cx.notify();
     });
   }
@@ -1137,30 +1144,41 @@ export default class Plannotator extends View {
       .when(Boolean(box), (el) => el.child(box));
   }
 
-  // The bar the pointer opens, over the first line of the highlight: one word, because there
-  // is one thing to do with a highlight here. Over rather than under, because the words under
-  // a highlight are the ones the person is reading; under it when that line is the block's
-  // first and there is no room above — a bar above the first line would sit outside the
-  // paragraph and be clipped by whatever clips it. It never runs past the column's right
-  // edge either — a button off the panel is a button nobody can press — and it is given its
-  // width, because an absolute element that hugs its text around here draws nothing at all.
+  // The bar the pointer opens, over the first line of the highlight: the one word it is for,
+  // then the two comments that are mostly the same every time — a bin and a thumbs up, which
+  // open the field with their words already in it. Over rather than under the line, because
+  // the words under a highlight are the ones the person is reading; under it when that line
+  // is the block's first and there is no room above — a bar above the first line would sit
+  // outside the paragraph and be clipped by whatever clips it. It never runs past the
+  // column's right edge either — a button off the panel is a button nobody can press — and it
+  // is given its width, because an absolute element that hugs its text around here draws
+  // nothing at all.
   renderNoteBar() {
     const t = theme(), at = this.aiming?.at ?? { x: 0, y: 0 };
     const wide = Number(this.size?.width) || 368;
-    const left = Math.max(0, Math.min(Number(at.x) || 0, Math.max(0, wide - 112)));
+    const left = Math.max(0, Math.min(Number(at.x) || 0, Math.max(0, wide - BAR_W)));
     const y = Number(at.y) || 0;
     // 24 px of bar and 4 px of air: above the line when the line is far enough down its
     // paragraph for that to stay inside it.
     const top = y >= 28 ? y - 28 : y + 6;
-    return h_flex().id("pl-note-bar").absolute().left(left).top(top).w(112).h(24).px(8).gap(6)
-      .items_center().rounded(6).bg(t.popover).border_1().border_color(t.border)
-      // No hover state: it is a bar that appears under the pointer that was just dragging, so
-      // the pointer is already on it, and anything it does on the way in reads as a flicker.
-      .cursor_pointer()
+    // Each third of the bar is its own target inside one surface; a third that is only a
+    // fill of its own would go see-through on hover in a theme that tints with alpha.
+    const part = (id, onClick) => h_flex().id(id).h(20).flex_none().px(6).gap(5).items_center()
+      .rounded(4).hover((s) => s.bg(t.hover)).cursor_pointer().on_click(onClick);
+    return h_flex().id("pl-note-bar").absolute().left(left).top(top).w(BAR_W).h(24).px(3).gap(2)
+      .items_center().overflow_hidden().rounded(6).bg(t.popover).border_1().border_color(t.border)
+      // No hover state on the bar itself: it appears under the pointer that was just dragging,
+      // so the pointer is already on it, and anything it does on the way in reads as a flicker.
       .on_mouse_down("left", (_e, cx) => cx.stop_propagation())
-      .on_click((_e, cx) => this.openComment(cx))
-      .child(svg(`${ICONS}/plus.svg`).size(11).flex_none().text_color(t.accent))
-      .child(div().text_size(11.5).text_color(t.foreground).child("Comment"));
+      .child(part("pl-note-comment", (_e, cx) => this.openComment(cx))
+        .child(svg(`${ICONS}/plus.svg`).size(11).flex_none().text_color(t.accent))
+        .child(div().flex_none().text_size(11.5).text_color(t.foreground).child("Comment")))
+      .child(part("pl-note-trash", (_e, cx) => this.openComment(cx, "Please delete this"))
+        .tooltip("Please delete this")
+        .child(svg(`${OWN}/trash.svg`).size(12).flex_none().text_color(t.muted)))
+      .child(part("pl-note-thumbs-up", (_e, cx) => this.openComment(cx, "👍 Looks good"))
+        .tooltip("👍 Looks good")
+        .child(svg(`${OWN}/thumbs-up.svg`).size(12).flex_none().text_color(t.muted)));
   }
 
   // The comment being written: the quote it stands for, the field, and the one button that
@@ -1169,21 +1187,12 @@ export default class Plannotator extends View {
   renderNoteField() {
     const t = theme(), c = this.commenting;
     if (!c?.field) return null;
-    // Two comments most of the work a highlight does, and they are only words to start from:
-    // the field is filled, the caret goes in, and the person says the rest (or presses
-    // Comment) themselves.
-    const quick = (icon, tip, words) => div().id(`pl-note-${icon}`).size(22).flex_none().flex()
-      .items_center().justify_center().rounded(5).hover((s) => s.bg(t.hover)).cursor_pointer()
-      .tooltip(tip).on_click((_e, cx) => this.prefill(words, cx))
-      .child(svg(`${OWN}/${icon}.svg`).size(12).flex_none().text_color(t.muted));
     return v_flex().id("pl-note-box").w_full().flex_none().mt(3).mb(2).gap(5).p(7).rounded(7)
       .bg(t.popover).border_1().border_color(t.accent)
       .on_mouse_down("left", (_e, cx) => cx.stop_propagation())
       .when(Boolean(c.quote), (el) => el.child(div().truncate().text_size(10.5).text_color(t.dim).child(c.quote)))
       .child(div().w_full().child(Textarea.new(c.field)))
       .child(h_flex().gap(4).items_center()
-        .child(quick("trash", "Please delete this", "Please delete this"))
-        .child(quick("thumbs-up", "Looks good", "👍 Looks good"))
         .child(div().flex_1())
         .child(h_flex().id("pl-note-cancel").h(22).flex_none().px(9).items_center().rounded(5)
           .hover((s) => s.bg(t.hover))
@@ -1194,16 +1203,6 @@ export default class Plannotator extends View {
           .hover((s) => s.bg(t.accent).text_color(t.accent_foreground))
           .on_click((_e, cx) => this.saveNote(cx))
           .child(div().text_size(11.5).child("Comment"))));
-  }
-
-  // A quick comment is a prefill, nothing more: the words land in the field with the caret
-  // after them, and Comment still sends them.
-  prefill(text, cx) {
-    const c = this.commenting;
-    if (!c?.field) return;
-    c.field.set_value(text);
-    c.field.focus();
-    cx?.notify();
   }
 
   // A staged comment in the reply band: what it is about, then the words, then the one thing
