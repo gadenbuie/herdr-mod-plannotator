@@ -48,6 +48,17 @@ the code.
   to see it; keep such shots out of the repo.
 - If a file is invalid the app keeps the last good version and writes why
   to `<name>.error` beside it. Check after every edit.
+- **Preview in a copy, and give the person's layout back.** `herdr-app do
+  mod.open --name plannotator` puts a floating copy on screen — the mod has
+  no overlay of its own, so the app makes one and remembers where it was in
+  `windows.json`; a temporary mod left as a block in a layout file draws an
+  error column in their window; and the layout in use is one `do` away from
+  being swapped for another. After a preview run read `herdr-app status`
+  (`layout`, `overlays`), close what was opened (`mod.open` again is its
+  toggle) and switch the layout back (`layout.switch <name>`), then remove
+  whatever the preview left in `layouts/*.json`, `layouts/.state/*.json`,
+  `windows.json` and `shared.json` (`plannotator.state` holds the panel's
+  view). What the person sees beats what the check says.
 
 ## What bit this mod already
 
