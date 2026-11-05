@@ -170,12 +170,15 @@ the tree — sticks to its space and comes back with it.
   are the ones in the paragraph under the pointer: a press and release in
   the same block with 4 px of travel between them (a click is a click)
   opens the "Comment" bar, and the block's first line is the quote.
-  `blocksOf` cuts a message's markdown at its blank lines — a fence stays
+  `rowsOf` cuts a message's markdown at its blank lines — a fence stays
   whole — and every block is drawn as its own `TextView`, so a selection
-  cannot run across two paragraphs and the anchor is never guessed. The
-  code view has no blocks to press, so it has one row instead, "Comment on
-  this file", above the `Editor`: that one is a `GLOBAL_COMMENT`, the
-  Inbox's own general comment. Nothing else has to be true of the markdown
+  cannot run across two paragraphs and the anchor is never guessed. A file's
+  blocks carry their line numbers as well (a paragraph reads "lines 3-5"),
+  which is what a comment on a file can name; a message's cannot, the agent's
+  words being nobody's numbered lines. The code view has no blocks to press,
+  so it has one row instead, "Comment on this file", above the `Editor`:
+  that one is a `GLOBAL_COMMENT`, the Inbox's own general comment, with no
+  lines to name. Nothing else has to be true of the markdown
   for this to hold: a block cut at a blank line renders as the same
   markdown it did inside the whole.
 - **A comment is saved as it is made, and carries on the Send.** Comment
@@ -189,6 +192,9 @@ the tree — sticks to its space and comes back with it.
   `annotation_ids` and renders them into the reply's `feedback`, which is
   where the Inbox puts them in the message the agent reads — the agent gets
   the words the person highlighted, not a separate record to go and find.
+  A comment on a file is headed `**Comment on \`spec.md\` lines 3-5:**` (or
+  `line 3`, or no lines for the whole file), the quote under it, the words
+  under that.
   An id the Inbox does not know refuses the whole reply, so the reply goes
   out again without `annotation_ids` and the words still arrive in
   `feedback`. A reply that only comments is a reply.

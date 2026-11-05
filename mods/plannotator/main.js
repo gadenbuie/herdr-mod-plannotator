@@ -483,21 +483,32 @@ function wordsWithoutQuestions(body) {
 // for one, and the text's own selection belongs to the host — so the block under the
 // pointer is the anchor: its first line is the quote, and the whole block is the words the
 // comment is about. Nothing else has to be true of the markdown for this to hold: a block
-// split at a blank line renders as the same markdown it did inside the whole.
-function blocksOf(text) {
+// split at a blank line renders as the same markdown it did inside the whole. `rowsOf` keeps
+// each block's line numbers too, which is what lets a comment on a file name the lines it is
+// about — a message's lines are nobody's to count.
+function rowsOf(text) {
   const out = [];
-  let block = [], fence = false;
-  for (const line of String(text ?? "").split("\n")) {
+  let block = [], fence = false, first = 1, last = 1;
+  String(text ?? "").split("\n").forEach((line, i) => {
+    const at = i + 1;
     if (/^\s*(?:```|~~~)/.test(line)) fence = !fence;
     if (!fence && line.trim() === "") {
-      if (block.length > 0) out.push(block.join("\n"));
+      if (block.length > 0) out.push({ block: block.join("\n"), first, last });
       block = [];
-      continue;
+      return;
     }
+    // The line numbers a file's comment can name: the block's own, in the file on screen,
+    // from its first line to the last one that carries words.
+    if (block.length === 0) first = at;
+    last = at;
     block.push(line);
-  }
-  if (block.length > 0) out.push(block.join("\n"));
-  return out.filter((b) => b.trim() !== "");
+  });
+  if (block.length > 0) out.push({ block: block.join("\n"), first, last });
+  return out.filter((r) => r.block.trim() !== "");
+}
+
+function blocksOf(text) {
+  return rowsOf(text).map((r) => r.block);
 }
 
 // The line a comment stands for, as the band over the field shows it: the block's first
@@ -520,7 +531,12 @@ function quoteOf(block) {
 // file or the message, then the quote the person highlighted, then what they wrote.
 function feedbackOf(notes) {
   return notes.map((n) => {
-    const where = n.target?.file ? `Comment on \`${n.target.file}\`` : "Comment on your message";
+    const t = n.target ?? {};
+    // A file's comment names the lines it is about, when the panel knows them: a paragraph
+    // in a markdown file is a range, and a whole file is none.
+    const one = Number(t.line) || 0, two = Number(t.lines) || 0;
+    const at = one && two > one ? ` lines ${one}-${two}` : one ? ` line ${one}` : "";
+    const where = t.file ? `Comment on \`${t.file}\`${at}` : "Comment on your message";
     const quote = n.quote ? `> ${n.quote}\n\n` : "";
     return `**${where}:**\n\n${quote}${n.text}`;
   }).join("\n\n");
@@ -1230,7 +1246,9 @@ export default class Plannotator extends View {
   // to do with it.
   renderNote(n) {
     const t = theme();
-    const where = [n.target?.file, n.quote].filter(Boolean).join(" · ");
+    const one = Number(n.target?.line) || 0, two = Number(n.target?.lines) || 0;
+    const at = one && two > one ? `:${one}-${two}` : one ? `:${one}` : "";
+    const where = [`${n.target?.file ?? ""}${at}`, n.quote].filter(Boolean).join(" · ");
     return h_flex().id(`pl-note-${n.id}`).w_full().flex_none().gap(6).items_start().p(6).rounded(6)
       .bg(t.background)
       .child(svg(`${ICONS}/square-pen.svg`).size(11).flex_none().mt(1).text_color(t.dim))
@@ -2668,8 +2686,9 @@ export default class Plannotator extends View {
       };
       return v_flex().id("pl-view-doc").flex_1().min_h(0).w_full().overflow_y_scrollbar().px(14).py(10)
         .child(v_flex().w_full().text_size(13.5).line_height(1.6)
-          .children(blocksOf(v.text || "").map((block, i) =>
-            this.renderNoteBlock(`a-${a.id}-${i}`, block, { ...topic, blockId: `block-${i + 1}` })))
+          .children(rowsOf(v.text || "").map((r, i) =>
+            this.renderNoteBlock(`a-${a.id}-${i}`, r.block,
+              { ...topic, blockId: `block-${i + 1}`, line: r.first, lines: r.last })))
           .when(!v.text, (el) => el.child(div().w_full()
             .child(TextView.markdown(`pl-att-${a.id}`, "_(no words)_")))));
     };

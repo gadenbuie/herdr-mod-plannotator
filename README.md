@@ -188,8 +188,8 @@ Comment moves the words into the reply band at the bottom of the thread,
 with the line they are about and a ✕ to drop them, and saves them to the
 Inbox at once; the band counts them ("1 answer and 1 comment go with this
 reply"). Send carries them with the reply: the agent reads your words,
-then **Comment on your message:** (or on the file's name), the quoted line,
-and the comment. Esc puts an open field away, and a click is only a click —
+then **Comment on your message:** — or, for a file, **Comment on `spec.md`
+lines 3-5:** — the quoted line, and the comment. Esc puts an open field away, and a click is only a click —
 the bar wants a drag.
 
 ## Plannotator
