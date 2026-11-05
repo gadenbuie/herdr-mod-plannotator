@@ -15,12 +15,16 @@ the code.
 
 - `mods/plannotator/main.js` — the whole mod, one `View`: the panel (no
   props), the palette (`props().mode === "palette"`), a tree row's menu
-  (`"menu"`). Five `sh -c` scripts live in it: `ASK` (the Inbox over its
-  loopback server), `OPEN` (the Inbox in the browser by hash route),
+  (`"menu"`). Six `sh -c` scripts live in it: `ASK` (the Inbox over its
+  loopback server), `OPEN` (the Inbox in the browser, by hash route or by
+  resource), `PULL` (one attachment's bytes into the app's folder),
   `LIST` (one level of a folder), `RUN` (a background session and its
   log), `ANNOUNCE` (decisions to Herdr toasts).
 - `mods/plannotator/mod.json` — the tab manifest `tab-host` reads; see the
   README's table.
+- `mods/plannotator/icon.svg`, `image.svg`, `video.svg`, `code.svg` — the
+  button's glyph and the ones a message's attached files wear, all
+  `currentColor` strokes so the theme tints them.
 - `keys.json` — the six `global` bindings this mod expects, merged into
   the person's `keys.json`, never replacing theirs.
 - `install.sh` — the delivery: copy the mod, merge the keys, check; and
@@ -52,8 +56,13 @@ read it before changing anything here. The short list:
 
 - A context does not survive the call that made it: anything that awaits
   and then draws is wrapped in `cx.spawn(async (cx) => …)`.
-- State made during a render throws: `TextareaState`, `InputState` and
-  focus handles are made from event handlers or tasks, never in `render`.
+- State made during a render throws: `TextareaState`, `InputState`,
+  `EditorState` and focus handles are made from event handlers or tasks,
+  never in `render`.
+- `image()` draws only from the app's own folder, and stretches to the box
+  it is given: an attachment is copied into `data/plannotator/att/` first,
+  and its width is computed from its own pixel size — never a bare
+  `.w().h()` pair.
 - Two methods of one name on a class is the second one winning silently —
   check the names (`field` and `answerField` exist because of this).
 - One keyboard list: drawing and keys both read `rowIds()`, so the

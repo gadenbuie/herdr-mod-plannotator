@@ -5,7 +5,8 @@ panel that says what is in the Plannotator Inbox — the questions, summaries
 and reviews agents left for the person. Each thread carries a dot for what
 it needs (yellow asks something, blue is new since the person looked, grey
 is read); any thread opens to read its messages in the panel, answer its
-questions by clicking their choices, and reply in words. Under the threads
+questions by clicking their choices, and reply in words — with the files the
+agents attached to those messages drawn and readable there too. Under the threads
 sits the annotate list: the last message, the review, the space's folder, a
 file tree for picking one file or folder, and another folder from a picker —
 each starts a background `plannotator` session in the folder being worked
@@ -49,8 +50,19 @@ the tree — sticks to its space and comes back with it.
   field grows 2→8 rows, Send goes live for words or a picked answer, and
   the line under it says what the Send carries: "1 answer goes with this
   reply"), and last an "Open in Inbox for picks and pictures" row. Pictures
-  come off the words and are counted as a link. A refused send says why in
+  written into the words are counted as a link; the files an agent attached
+  are the message's own: a picture drawn under the words with its name and
+  size beneath it, and every other file a row — its kind's glyph, its name,
+  its size. A click on either opens the file. A refused send says why in
   the Inbox's own sentence.
+- **A file, opened**, is a page of its own under the thread: the header is
+  the back chevron and the file's name, a `dim` row under it says what kind
+  of file it is, how big, and for a picture or a film its size in pixels and
+  length, and the body is the file — a document as the markdown it is, code
+  and a patch inside one code block, any other text with line numbers, a
+  picture at the panel's width. Read-only: nothing here edits, downloads or
+  uploads. A video is a row that plays it in the browser, and a web page is
+  its source plus a row to the Inbox, which renders it; both say so.
 - **The palette** (520×340 at the pointer): a search line over six rows —
   Annotate the last message, Review my changes, Annotate all files,
   Annotate another folder…, Open the Inbox, Open Plannotator as a tab —
@@ -116,6 +128,20 @@ the tree — sticks to its space and comes back with it.
   thread re-reads to show what moved it. **This is the whole write
   surface** — a cursor, an answer's draft, a reply. No resolve, upload,
   tag, handoff or skip leaves the panel.
+- **The files come from the Inbox, not from the path the agent named.** An
+  attachment is a record — `id`, `name`, `kind` (markdown, text, code, html,
+  image, video), `size`, its hash — and the file the agent pointed at is
+  usually gone by the time the person reads the thread, so what is drawn is
+  the copy the Inbox kept: `GET attachments/<id>?version=sent` for the words,
+  `<id>/image` and `<id>/video` for the bytes. Each is pulled once into
+  `~/.config/herdr-app/data/plannotator/att/`, named `<id>-<hash8>.<ext>`,
+  and a file already there is the answer — a sent attachment cannot change.
+  Nothing prunes that folder. A file the Inbox no longer has says so on its
+  page and offers the thread; a thread whose pictures cannot be read keeps
+  their rows. Pictures are pulled when a thread opens (once each, then kept)
+  so a message can draw them; every other kind is read only when the person
+  opens it. The files are read-only in both directions: the panel shows them
+  and sends nothing about them.
 - **The rest of an answer is a page away.** "Open in Inbox for picks and
   pictures" (and the header's page button) opens the Inbox at
   `#thread=<id>` through `plannotator inbox --background`, which prints the
@@ -191,23 +217,31 @@ the tree — sticks to its space and comes back with it.
   `order` puts it at the right end of the contributors.
 - `mods/plannotator/icon.svg` — the button's glyph, `stroke="currentColor"`
   and `fill="none"` so `tab-host` tints it with the button's text colour.
+  `image.svg`, `video.svg` and `code.svg` beside it are the same kind of
+  glyph in the same style, worn by a message's attached files.
 - `keys.json` — six `global` bindings (see the README). Merge into the
   person's `keys.json`, never replacing it. The `cmd-alt-i` binding is
   `tab-host.toggle:plannotator` — that mod's command, spelled `tab-host`,
   not `tabhost`.
-- Five `sh -c` scripts, because a mod has no directory or HTTP API of its
+- Six `sh -c` scripts, because a mod has no directory or HTTP API of its
   own: `ASK` (the Inbox over its loopback server — `curl -s -m 5` to a
   route under `/api/inbox/`, the port read from `inbox.json`, a canned
-  error JSON when the server is down), `OPEN` (the Inbox in the browser by
-  hash route), `LIST` (one tree level, NUL-separated, `.git` skipped, 200
-  entries at most), `RUN` (a background session and its log),
+  error JSON when the server is down), `OPEN` (the Inbox in the browser:
+  a `#thread=<id>` route, or a `/api/inbox/…` resource opened as it is),
+  `PULL` (one attachment's bytes to a file, `?version=sent`, skipped when
+  the file is already there), `LIST` (one tree level, NUL-separated, `.git`
+  skipped, 200 entries at most), `RUN` (a background session and its log),
   `ANNOUNCE` (finished sessions, `__told`-marked, printed once).
 - `herdr` functions: `spaces`, `focused`, `panes`, `exec`, `run`, `theme`,
   `props`, `openOverlay`, `closeOverlay`, `notify`, `watchFolder`,
   `pickFolder`, `home`, `appHome`, `nextCommand`, `keys`, `shared`,
-  `setShared`. Programs: the `plannotator` CLI (`last`, `review`,
-  `annotate <path>`, `inbox --background`), `curl`, `open`/`xdg-open`,
-  `sh`. Icons are the shipped `workspace-chrome` set plus this mod's own.
+  `setShared`, `readTextFile`. Programs: the `plannotator` CLI (`last`,
+  `review`, `annotate <path>`, `inbox --background`), `curl`,
+  `open`/`xdg-open`, `sh`. Elements: `svg`, `image` (a file the mod copied
+  into the app's folder), `TextView.markdown` (a document, and code and a
+  patch as one fenced block), and `Editor` with a readonly `EditorState`
+  for text a fence would mangle. Icons are the shipped `workspace-chrome`
+  set plus this mod's own.
 - The loopback routes are internal — the same requests the Inbox page
   itself opens with, needing no token, but a new Inbox version can change
   a payload. The parsers throw on a shape they don't know, which turns
@@ -263,6 +297,21 @@ the tree — sticks to its space and comes back with it.
   frame at the bottom of every thread read as clutter; the band runs the
   panel's full width on `popover`, and the rule over it (not a border on
   it) says the caret is there.
+- **`image()` reads the app's own folder and nothing else.** A relative
+  path against `appHome()` is drawn; an absolute path in the person's home
+  is not, and a file that is not there draws nothing at all — no error, no
+  box, a gap. That is why `PULL` copies the bytes into
+  `data/plannotator/att/` first, why the relative half of that path is what
+  is handed to `image()`, and why a picture is drawn only once its file is
+  known to be there (until then the message keeps the row).
+- **`image()` stretches to the box it is given.** `.w(200)` alone keeps the
+  file's own shape; `.w(300).max_h(240)` squashes it into 300×240. So the
+  width is worked out from the attachment's own `width` and `height` — the
+  panel's column, the picture's own pixels, a 200 px height cap in a
+  message — and only `.w(...)` is set.
+- **`EditorState` is state, made in the task that read the file**, like the
+  reply field: one built in a render throws, one rebuilt per frame loses the
+  scroll. It is released when the file's page closes.
 - **A question fence is not always `:::question`.** The Inbox also writes
   `:::question-multi` and `:::question-text`, so `wordsWithoutQuestions`
   matches all three — one that matched the bare fence only drew the whole
@@ -287,6 +336,12 @@ the tree — sticks to its space and comes back with it.
 - A reply under words the person never saw is refused with the Inbox's
   own sentence, the words stay, and the thread re-reads to show what
   moved it.
+- A message with files shows them: a picture drawn under its words with
+  its name and size, every other file a row with its kind's glyph. A click
+  opens the file: a document as markdown, code as a code block, a log with
+  line numbers, a picture at the panel's width, a video and a web page by
+  their browser rows. Esc and the back chevron return to the thread, and a
+  file the Inbox no longer has says so and offers the thread.
 - Sessions start in the background (no tab, a log per run) and a decision
   becomes one Herdr toast within the second, panel hidden, `__told`
   keeping it single.

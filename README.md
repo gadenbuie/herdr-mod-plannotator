@@ -10,7 +10,9 @@ the panel is closed; clicking it opens the Inbox's threads in the side
 panel, each with a dot for what it needs — yellow asks something, blue is
 new since you looked, grey is read. Read any thread as markdown right
 there, answer its questions by clicking their choices, reply in words
-without leaving the terminal. When a decision is made in a Plannotator
+without leaving the terminal — and read the files the agent attached to it:
+a picture drawn where it was sent, a document, a code file or a patch one
+click from its own read-only page. When a decision is made in a Plannotator
 session, it arrives as a Herdr toast the second it happens — panel open or
 not.
 
@@ -124,6 +126,27 @@ waits for one press of the button (or `cmd-alt-i`).
 Session logs land in `~/.config/herdr-app/data/plannotator/sessions/` — a
 `__label` first line, the CLI's output, and `__exit <code>` at the end.
 Nothing prunes them.
+
+## The files agents attach
+
+A message that came with files shows them. A picture is drawn under the
+words at the size it was taken, with its name and size beneath it; every
+other file is a row — its kind's glyph, its name, its size — and so is a
+picture once it is clicked. Clicking either opens the file in the panel,
+read-only: a document as the markdown it is, code and a patch inside a code
+block, any other text with line numbers, a picture at the panel's width.
+Nothing there edits, downloads or uploads, and the back chevron (or Esc)
+returns to the thread it came in.
+
+Two kinds the panel cannot show, and does not pretend to: a video opens in
+the browser where the Inbox's own player has it, and a web page shows its
+source with a row to the Inbox, which renders it.
+
+The bytes come from the Inbox, not from the path the agent named — that
+file is usually gone by the time you read the thread, and the Inbox kept
+what it sent. They are cached in
+`~/.config/herdr-app/data/plannotator/att/`, one file per attachment named
+by its hash. Nothing prunes them.
 
 ## Plannotator
 

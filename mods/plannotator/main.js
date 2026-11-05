@@ -4,7 +4,8 @@
 // browser. This panel says what waits in the Inbox — its own list of threads, with a
 // dot for what each needs: yellow when the Inbox has it waiting on the person, blue
 // when it is new since they last looked, grey when it is read — reads a thread's
-// messages in the panel, opens the Inbox, and starts
+// messages in the panel, with the files an agent attached in them (a picture drawn, a
+// document one click from its own page), opens the Inbox, and starts
 // `plannotator last | review | annotate` in the background: the CLI prints the page's
 // address, the browser opens it, and the decision comes out at the end of the run's
 // log. No tab, no window. Its file tree is how a single file or folder is annotated:
@@ -23,14 +24,23 @@
 // a row's menu (`"menu"`) as overlays: the app's palette lists Herdr's commands only,
 // so this is the way in by keyboard. Those two are the only copies that float.
 
-import { View, div, svg } from "gpui-kit";
-import { v_flex, h_flex, InputState, Input, TextView, TextareaState, Textarea } from "gpui-base";
+import { View, div, svg, image } from "gpui-kit";
+import { v_flex, h_flex, InputState, Input, TextView, TextareaState, Textarea, EditorState, Editor } from "gpui-base";
 import {
   spaces, focused, panes, exec, run, theme, props, openOverlay, closeOverlay,
   notify, watchFolder, pickFolder, home, appHome, nextCommand, keys, shared, setShared,
+  readTextFile,
 } from "herdr";
 
 const ICONS = "mods/workspace-chrome";
+// This mod's own glyphs, beside `icon.svg`: a picture, a film and a code mark, for the
+// kinds of file the shipped set has no shape for.
+const OWN = "mods/plannotator";
+// Where an attached file is kept so the panel can draw it: the Inbox's own bytes, copied
+// once into the app's folder. `image()` reads the app's folder and nothing outside it,
+// so a path in the person's home draws nothing at all — and the path an agent named is
+// usually gone by the time the person reads the thread anyway.
+const ATT = () => `${appHome()}/data/plannotator/att`;
 // The Inbox's store: one folder per project, one JSON record per line. It is watched for
 // changes; the list itself is asked of the Inbox server (see `READ`).
 const STORE = () => `${home()}/.plannotator/inbox`;
@@ -65,15 +75,40 @@ else
 fi
 printf '%s' "$out"
 `;
+// One attachment's own bytes, once, where the panel can draw them. The Inbox hands a
+// sent file back at `attachments/<id>` (its words) or `<id>/image`, `<id>/video` (its
+// bytes), and `?version=sent` asks for the copy it kept. `$2` is that route, `$3` the
+// file to write, and a file already there is the answer: a sent attachment never
+// changes, which is why the name it is cached under carries its hash.
+const PULL = String.raw`
+cd "$1" || exit 0
+[ -f inbox.json ] || { printf '{"error":"The Inbox is not running"}'; exit 0; }
+p=$(sed -n 's/.*"port": *\([0-9][0-9]*\).*/\1/p' inbox.json | head -n 1)
+[ -n "$p" ] || { printf '{"error":"The Inbox is not running"}'; exit 0; }
+command -v curl >/dev/null 2>&1 || { printf '{"error":"curl is missing"}'; exit 0; }
+[ -s "$3" ] && { printf '{"ok":1}'; exit 0; }
+mkdir -p "$(dirname "$3")" 2>/dev/null
+code=$(curl -s -m 30 -o "$3" -w '%{http_code}' "http://127.0.0.1:$p/api/inbox/$2") || code=000
+[ "$code" = 200 ] && [ -s "$3" ] && { printf '{"ok":1}'; exit 0; }
+msg=$(sed -n 's/.*"error":"\([^"]*\)".*/\1/p' "$3" 2>/dev/null | head -n 1)
+rm -f "$3"
+[ -n "$msg" ] || msg="The Inbox did not hand over this file"
+printf '{"error":"%s"}' "$(printf '%s' "$msg" | tr -d '"')"
+`;
 // The Inbox in the person's browser, on one page of it: `$1` is the page's own hash
-// route — `thread=<id>`, or empty for the list. `--background` is what keeps this to
+// route — `thread=<id>`, or empty for the list — or, when it starts with `/`, one of
+// the Inbox's own resources (the video an agent attached, say) to open as it is.
+// `--background` is what keeps this to
 // one tab: it prints a running Inbox's address, or starts a stopped one without a
 // browser, and opens nothing, so the address can carry the route. With no browser
 // command at all (a remote session) the address is printed and the panel toasts it.
-const OPEN = String.raw`
+const OPEN = `
 url=$(plannotator inbox --background 2>/dev/null) || exit 0
 [ -n "$url" ] || exit 0
-href="$url#$1"
+case "$1" in
+  /*) href="\${url%/}$1" ;;
+  *) href="$url#$1" ;;
+esac
 if command -v open >/dev/null 2>&1 && open "$href" 2>/dev/null; then exit 0; fi
 if command -v xdg-open >/dev/null 2>&1 && xdg-open "$href" >/dev/null 2>&1; then exit 0; fi
 printf '%s' "$href"
@@ -175,13 +210,13 @@ async function asked(method, route, body) {
   return data;
 }
 
-// The Inbox in the person's browser: the list, or one thread of it (`hash` is the
-// page's own route, `thread=<id>`). Nothing is closed and no tab is left behind —
-// `OPEN` starts a stopped Inbox without a browser, so there is one tab, on the page
-// the person asked for. No browser command answers in a remote session: the address
-// is what the toast says instead.
-function openInbox(hash = "") {
-  exec("sh", ["-c", OPEN, "plannotator", hash]).then((r) => {
+// The Inbox in the person's browser: the list, or one thread of it (`at` is the page's own
+// route, `thread=<id>`), or one of its resources — a video, a picture — when `at` starts
+// with `/`. Nothing is closed and no tab is left behind — `OPEN` starts a stopped Inbox
+// without a browser, so there is one tab, on the page the person asked for. No browser
+// command answers in a remote session: the address is what the toast says instead.
+function openInbox(at = "") {
+  exec("sh", ["-c", OPEN, "plannotator", at]).then((r) => {
     if (r.code === 0) return;
     const where = String(r.stdout ?? "").trim();
     if (where) notify({ title: "Plannotator", body: where });
@@ -249,6 +284,80 @@ function ago(ms) {
   if (m < 1440) return `${Math.floor(m / 60)}h`;
   if (m < 10080) return `${Math.floor(m / 1440)}d`;
   return `${Math.floor(m / 10080)}w`;
+}
+
+// The glyph a kind of file wears: this mod's own for the shapes the shipped set has
+// none of, the document glyph for everything that is read as words.
+function glyphOf(kind) {
+  if (kind === "image") return `${OWN}/image.svg`;
+  if (kind === "video") return `${OWN}/video.svg`;
+  if (kind === "code") return `${OWN}/code.svg`;
+  return `${ICONS}/file-text.svg`;
+}
+
+// A file's size the way a person reads one: "640 B", "6.4 KB", "1.2 MB".
+function sizeOf(bytes) {
+  const n = Number(bytes) || 0;
+  if (n < 1024) return `${n} B`;
+  if (n < 1024 * 1024) return n < 10240 ? `${(n / 1024).toFixed(1)} KB` : `${Math.round(n / 1024)} KB`;
+  return `${(n / 1024 / 1024).toFixed(1)} MB`;
+}
+
+// The extension a copied file is named by: the code view reads the name to know what it
+// was handed, and a picture's bytes are sniffed the same way.
+function extOf(name) {
+  const m = String(name ?? "").toLowerCase().match(/\.([a-z0-9]{1,8})$/);
+  return m ? m[1] : "bin";
+}
+
+// The code view's language, by extension. Anything unlisted is plain text, which is what
+// an unknown language would fall back to anyway.
+const LANGUAGES = {
+  js: "javascript", mjs: "javascript", cjs: "javascript", jsx: "javascript",
+  ts: "typescript", tsx: "typescript", json: "json", py: "python", rb: "ruby",
+  sh: "shell", bash: "shell", zsh: "shell", css: "css", scss: "css", html: "html",
+  yml: "yaml", yaml: "yaml", toml: "toml", rs: "rust", go: "go", java: "java",
+  c: "c", h: "c", cc: "cpp", cpp: "cpp", hpp: "cpp", sql: "sql", xml: "xml",
+  md: "markdown", r: "r", swift: "swift", kt: "kotlin", php: "php", lua: "lua",
+};
+
+function languageOf(name) {
+  return LANGUAGES[extOf(name)] ?? null;
+}
+
+// A video's length, as a player shows it: "0:40".
+function durationOf(ms) {
+  const s = Math.round((Number(ms) || 0) / 1000);
+  if (s <= 0) return null;
+  const m = Math.floor(s / 60);
+  return m > 0 ? `${m}:${String(s % 60).padStart(2, "0")}` : `${s}s`;
+}
+
+// The kinds whose words the panel reads for itself: the Inbox hands over the text of a
+// sent file, and each of these is drawn from it. A picture and a video are bytes, not
+// words.
+function readable(kind) {
+  return kind === "markdown" || kind === "text" || kind === "code" || kind === "html";
+}
+
+// Whether a text file is shown as a document rather than in the code view: the
+// attachments agents send are mostly markdown, code and patches, and those read better as
+// the viewer draws them — a document as markdown, code and a patch inside one fenced
+// block. Anything else is a text file the code view lists best.
+function asDocument(a) {
+  // A file too big to lay out as one block is listed with line numbers instead: the viewer
+  // would have to draw every line of it before the person could scroll.
+  if ((Number(a?.size) || 0) > 500000) return false;
+  if (a?.kind === "markdown" || a?.kind === "code") return true;
+  return /^(?:diff|patch|md|markdown)$/.test(extOf(a?.name));
+}
+
+// A file's words as one fenced block, with a fence longer than the longest run of
+// backticks inside it, so code that quotes code still comes out as one block.
+function fenced(text, language) {
+  const longest = (String(text).match(/`+/g) ?? []).reduce((n, s) => Math.max(n, s.length), 0);
+  const fence = "`".repeat(Math.max(3, longest + 1));
+  return `${fence}${language ?? ""}\n${String(text).replace(/\n$/, "")}\n${fence}`;
 }
 
 // The newest `seq` a thread's messages carry: the cursor both the seen request and a
@@ -350,6 +459,18 @@ export default class Plannotator extends View {
     this.pending = null;
     // Whether the person has asked for the whole conversation; see `renderThread`.
     this.showAll = false;
+    // A file an agent attached, open in the panel: its own page, with the header's back
+    // button returning to the thread. `null` while a thread or the list is on screen.
+    this.viewing = null;
+    // The bytes of the files this copy has read, by attachment id: the app-relative path
+    // a picture is drawn from and the absolute one the code view reads. A file on disk
+    // stays in here for the copy's life, so a thread read again costs no fetch.
+    this.files = new Map();
+    // The ones being read now, so a second read of the same thread asks once.
+    this.readingFiles = new Set();
+    // The panel's own width, from `on_size_change`: a picture is drawn no wider than the
+    // column it sits in, and `image()` fills whatever box it is given.
+    this.size = null;
     // One save at a time per question, chained by question id: see `savePick`.
     this.saving = new Map();
     this.cardError = null;
@@ -458,6 +579,8 @@ export default class Plannotator extends View {
   // model (`GET threads/<id>`, the request its page makes for a thread) rather than
   // from the store: the records say what was written, not what it adds up to.
   openThread(id, cx) {
+    // A file open in the panel belongs to the thread leaving the screen.
+    this.releaseViewer();
     this.opened = { id, thread: null, error: null };
     this.cursor = 0;
     // A new thread starts with an empty field: what was half-written in another one is
@@ -573,6 +696,9 @@ export default class Plannotator extends View {
         if (!this.draft) this.field(cx);
         this.seedFields(cx);
         this.markSeen(id, data.thread.messages, data.row);
+        // The pictures in the thread it just read, so the messages can draw them rather
+        // than point at the Inbox for a look at them.
+        this.loadPictures(cx);
       } catch (e) {
         if (this.opened?.id !== id) return;
         this.opened.error = String(e?.message ?? e).split("\n")[0].slice(0, 160);
@@ -602,6 +728,13 @@ export default class Plannotator extends View {
   // Back to the list. The panel's copy is a page, not an overlay, so this closes
   // nothing: it puts the list back, which the next read has already kept fresh.
   back(cx) {
+    // A file is one page under the thread it came in, so the first back is the thread
+    // and the second is the list.
+    if (this.viewing) {
+      this.releaseViewer();
+      cx?.notify();
+      return true;
+    }
     if (!this.opened) return false;
     this.opened = null;
     this.cursor = 0;
@@ -612,6 +745,125 @@ export default class Plannotator extends View {
     this.forgetFields();
     cx?.notify();
     return true;
+  }
+
+  // ---- the files an agent attached ----
+
+  // One attachment's bytes, in the app's own folder, where a picture can be drawn and a
+  // code view can read them: the Inbox's own copy of what the agent sent, cached under a
+  // name that carries the file's hash so nothing stale can ever be shown from it.
+  async pull(a) {
+    const name = `${a.id}-${String(a.sent_sha256 ?? "").slice(0, 8)}.${extOf(a.name)}`;
+    const abs = `${ATT()}/${name}`;
+    // `image()` resolves a path against the app's own folder — `appHome()` is that folder —
+    // and draws nothing at all for a path outside it, so the picture is handed the short
+    // form of the same file.
+    const rel = abs.slice(appHome().length + 1);
+    const route = a.kind === "image"
+      ? `attachments/${a.id}/image?version=sent`
+      : `attachments/${a.id}?version=sent`;
+    const r = await exec("sh", ["-c", PULL, "plannotator", STORE(), route, abs]);
+    let out;
+    try {
+      out = JSON.parse(String(r.stdout ?? "").trim() || "{}");
+    } catch {
+      out = { error: "The Inbox did not hand over this file" };
+    }
+    if (out?.error) throw new Error(String(out.error));
+    return { abs, rel };
+  }
+
+  // The pictures a thread carries, read once each so its messages can draw them. One
+  // that cannot be read keeps its row, which is the way into the Inbox's own copy of it:
+  // a file that cannot be handed over is not a broken thread.
+  loadPictures(cx) {
+    const want = [];
+    for (const m of this.opened?.thread?.messages ?? []) {
+      for (const a of m?.attachments ?? []) {
+        if (a?.kind !== "image" || !a.id) continue;
+        if (this.files.has(a.id) || this.readingFiles.has(a.id)) continue;
+        this.readingFiles.add(a.id);
+        want.push(a);
+      }
+    }
+    if (want.length === 0) return;
+    cx.spawn(async (cx) => {
+      for (const a of want) {
+        try {
+          this.files.set(a.id, await this.pull(a));
+        } catch {
+          // The row stays, and says why when the person opens it.
+        } finally {
+          this.readingFiles.delete(a.id);
+        }
+      }
+      cx.notify();
+    });
+  }
+
+  // A file an agent sent, opened in the panel: read-only, on a page of its own, with the
+  // header's back button returning to the thread it came in. A picture is drawn, a
+  // document is rendered as the markdown it is, code opens in the code view, and a video
+  // — which this host cannot draw — is offered to the browser instead.
+  openAttachment(a, cx) {
+    if (!a?.id) return;
+    const v = { id: a.id, att: a, state: "ready", text: null, file: null, error: null, editor: null };
+    this.releaseViewer();
+    this.viewing = v;
+    cx?.notify();
+    // A video is bytes the panel cannot use: it goes to the browser, so there is nothing
+    // to read before the page draws.
+    if (!readable(a.kind) && a.kind !== "image") return;
+    v.state = "loading";
+    cx?.spawn(async (cx) => {
+      try {
+        const file = await this.pull(a);
+        if (this.viewing !== v) return;
+        v.file = file;
+        if (readable(a.kind)) {
+          v.text = String(await readTextFile(file.abs));
+          if (this.viewing !== v) return;
+          // The code view's state is made here, in the task that read the file: made in a
+          // render it would throw, and one rebuilt per frame would lose the scroll. Only
+          // the files the viewer does not draw need it.
+          if (!asDocument(a)) {
+            v.editor = EditorState.new({
+              language: languageOf(a.name) ?? undefined,
+              value: v.text,
+              readonly: true,
+              soft_wrap: false,
+            });
+          }
+        }
+        v.state = "ready";
+      } catch (e) {
+        if (this.viewing !== v) return;
+        v.state = "error";
+        v.error = String(e?.message ?? e).split("\n")[0].slice(0, 200);
+      } finally {
+        cx.notify();
+      }
+    });
+  }
+
+  // The file page's own state, thrown away with it: the code view holds a document and a
+  // scroll position that belong to the file that is closing.
+  releaseViewer() {
+    const state = this.viewing?.editor;
+    this.viewing = null;
+    if (!state) return;
+    try { state.release?.(); } catch { /* a released view is a view */ }
+  }
+
+  // How wide a picture is drawn: its own width, never past the panel's column, and — in a
+  // message, where the words are the point — never more than `cap` pixels tall. `image()`
+  // stretches to the box it is given, so the box is the file's own shape scaled down.
+  pictureWidth(a, cap = 200) {
+    const column = Math.max(160, (Number(this.size?.width) || 380) - 56);
+    const w = Number(a.width) || 0, h = Number(a.height) || 0;
+    let px = Math.min(column, w || column);
+    if (cap && w > 0 && h > 0) px = Math.min(px, Math.round((cap * w) / h));
+    return Math.max(64, Math.round(px));
   }
 
   // ---- the state that sticks to the space ----
@@ -652,12 +904,14 @@ export default class Plannotator extends View {
     const st = shared(STATE) ?? {};
     const id = typeof st.thread === "string" && st.thread ? st.thread : null;
     if (id && id !== this.opened?.id) {
+      this.releaseViewer();
       this.opened = { id, thread: null, error: null };
       this.reply = null;
       this.writing = false;
       this.showAll = Boolean(st.showAll);
       this.loadThread(cx);
     } else if (!id && this.opened) {
+      this.releaseViewer();
       this.opened = null;
       this.reply = null;
       this.writing = false;
@@ -789,6 +1043,9 @@ export default class Plannotator extends View {
   // then the annotate rows, then the tree. The keys walk this
   // order, so the row that is highlighted is always the row Return runs.
   rowIds() {
+    // A file on a page of its own: the header's back button is the only row there, so Esc
+    // and Return have exactly one thing to do.
+    if (this.viewing) return ["back"];
     // A thread, open: the way to the Inbox on it, then the way back. The thread's own
     // messages are not rows — they are what the person came to read, and nothing in
     // them launches.
@@ -809,6 +1066,10 @@ export default class Plannotator extends View {
   // to the browser and takes the window down with it.
   runRow(id, cx) {
     if (!id) return;
+    if (this.viewing) {
+      if (id === "back") this.back(cx);
+      return;
+    }
     if (this.opened) {
       if (id === "back") this.back(cx);
       if (id === "respond") this.respond();
@@ -981,6 +1242,9 @@ export default class Plannotator extends View {
     // border, the theme's background.
     return v_flex().id("root").size_full().min_h(0).overflow_hidden()
       .rounded(10).bg(t.background).border_1().border_color(t.border)
+      // How wide the column is, which is what a picture is drawn to fit: a render that
+      // wants it only reads it, so this reports and does not notify.
+      .on_size_change((size) => { this.size = size; })
       // One list of rows and one set of keys, the same in the panel and in the palette
       // that opens over it. The panel gets the keyboard on a click; Esc has nothing to
       // close there, so it is left to the app.
@@ -1008,7 +1272,9 @@ export default class Plannotator extends View {
         .when(Boolean(this.opened), (el) => el
           .child(this.iconButton("pl-back", "chevron-left", (_e, cx) => this.back(cx)))
           .child(div().flex_1().min_w(0).truncate().font_semibold()
-            .child(this.opened?.thread?.subject || "Thread")))
+            .child(this.viewing
+              ? String(this.viewing.att?.name ?? "File")
+              : (this.opened?.thread?.subject || "Thread"))))
         .when(!this.opened, (el) => el
           .child(div().font_semibold().child("Plannotator"))
           .when(needs > 0, (el) => el.child(div().px(6).rounded(99).bg(t.accent).text_color(t.accent_foreground)
@@ -1022,7 +1288,8 @@ export default class Plannotator extends View {
       // the conversation between them, so the scrollbar there belongs to the middle.
       .child(v_flex().id("pl-scroll").flex_1().min_h(0).items_center()
         .when(!this.opened, (el) => el.overflow_y_scrollbar())
-        .when(Boolean(this.opened), (el) => el.overflow_hidden().child(this.renderThread(sel)))
+        .when(Boolean(this.opened), (el) => el.overflow_hidden()
+          .child(this.viewing ? this.renderAttachment() : this.renderThread(sel)))
         .when(!this.opened, (el) => el.child(v_flex().id("pl-body").w_full().max_w(760).py(4).pb(10)
           .child(label("Threads"))
           .when(waiting.length === 0, (el) => el.child(v_flex().px(14).py(6).gap(3)
@@ -1542,6 +1809,12 @@ export default class Plannotator extends View {
     const asked = Array.isArray(m?.questions) ? m.questions : [];
     const { text, pictures } = wordsOf(asked.length ? wordsWithoutQuestions(m?.body) : m?.body);
     const at = Date.parse(m?.created_at);
+    // The files the agent sent with its words: a picture is drawn where it can be seen,
+    // everything else is a row. An attachment is often the thing the message is about, so
+    // a thread that only counts them sends the person to the browser to find out what.
+    const atts = (Array.isArray(m?.attachments) ? m.attachments : []).filter((a) => a?.id);
+    const pics = atts.filter((a) => a.kind === "image");
+    const files = atts.filter((a) => a.kind !== "image");
     return v_flex().id(`pl-msg-${m?.id}`).w_full().px(12).py(7).mx(6).rounded(8).gap(3)
       // The accent edge is square: a rounded corner either side of it would bend the rule
       // away from the words it marks, so the left of the box is a plain corner and only
@@ -1563,6 +1836,11 @@ export default class Plannotator extends View {
         .child(div().w_full().text_size(14).line_height(1.6)
           .child(TextView.markdown(`pl-md-${m?.id}`, text || "_(no words)_"))))
       .children(asked.map((q) => this.renderQuestion(m, q))))
+      .when(atts.length > 0, (el) => el.child(v_flex().w_full().flex_none().gap(4).pt(2)
+        .when(pics.length > 0, (s) => s.child(h_flex().gap(6).flex_wrap().items_start()
+          .children(pics.map((a) => this.renderPicture(a)))))
+        .when(files.length > 0, (s) => s.child(h_flex().gap(4).flex_wrap()
+          .children(files.map((a) => this.renderChip(a)))))))
       // A message with pictures in it says so, and says it as a link: it goes where the
       // pictures are — the page on this thread — in `accent` with the same `file-text` the
       // row at the bottom of the page wears, so "this opens the Inbox" reads the same in
@@ -1575,6 +1853,114 @@ export default class Plannotator extends View {
         .child(svg(`${ICONS}/file-text.svg`).size(11).flex_none().text_color(t.accent))
         .child(div().text_size(11).text_color(t.accent)
           .child(pictures === 1 ? "1 picture — open it in the Inbox" : `${pictures} pictures — open them in the Inbox`))));
+  }
+
+  // One file an agent attached: the glyph its kind wears, its name, its size, and a click
+  // that opens it in the panel. This is the only thing in the thread that says what the
+  // agent sent — the words around it usually only say "attached".
+  renderChip(a) {
+    const t = theme();
+    return h_flex().id(`pl-att-${a.id}`).h(22).flex_none().max_w(250).pl(5).pr(6).gap(5).rounded(5)
+      .bg(t.popover).border_1().border_color(t.border)
+      .hover((s) => s.bg(t.hover)).cursor_pointer()
+      .on_click((_e, cx) => this.openAttachment(a, cx))
+      .child(svg(glyphOf(a.kind)).size(12).flex_none().text_color(t.muted))
+      .child(div().min_w(0).truncate().text_size(11.5).text_color(t.accent).child(a.name ?? "file"))
+      .child(div().flex_none().text_size(10.5).text_color(t.dim).child(sizeOf(a.size)));
+  }
+
+  // A picture an agent attached, drawn in its message. Until its bytes land it is the same
+  // row a document gets, so the message never draws an empty space where a file was.
+  renderPicture(a) {
+    const t = theme(), file = this.files.get(a.id);
+    if (!file) return this.renderChip(a);
+    return v_flex().id(`pl-pic-${a.id}`).flex_none().gap(3).cursor_pointer()
+      .on_click((_e, cx) => this.openAttachment(a, cx))
+      .child(image(file.rel).w(this.pictureWidth(a)).rounded(6))
+      .child(div().text_size(10.5).text_color(t.accent).truncate()
+        .child(`${a.name ?? "picture"} · ${sizeOf(a.size)}`));
+  }
+
+  // A file on the panel's own page: read-only, and only ever read. The header above names
+  // it and its back button is the thread it came in; the row under the header says what
+  // kind of file it is and how big, and the body is the file itself — drawn, rendered or
+  // listed — since that is what the person came here for.
+  renderAttachment() {
+    const t = theme(), v = this.viewing, a = v?.att ?? {};
+    const kind = { image: "Picture", video: "Video", markdown: "Document", code: "Code", html: "Web page" }[a.kind]
+      ?? "Text";
+    const facts = [kind];
+    if (Number(a.width) && Number(a.height)) facts.push(`${a.width} × ${a.height}`);
+    const length = durationOf(a.duration_ms);
+    if (length) facts.push(length);
+    facts.push(sizeOf(a.size));
+    // A row that opens something the panel cannot draw in the browser: the video itself, a
+    // picture at the size it was taken, or the thread a file came in when there is nothing
+    // of it to show here.
+    const row = (label, at, glyph = `${ICONS}/file-text.svg`) => h_flex().id(`pl-view-open-${at}`)
+      .h(24).flex_none().px(8).gap(6).items_center()
+      .rounded(6).hover((s) => s.bg(t.hover)).cursor_pointer().on_click(() => openInbox(at))
+      .child(svg(glyph).size(12).flex_none().text_color(t.accent))
+      .child(div().text_size(11.5).text_color(t.accent).child(label));
+    const inThread = () => row("Open the thread in the Inbox", this.opened?.id ? `thread=${this.opened.id}` : "");
+    const body = () => {
+      if (v.state === "loading") {
+        return v_flex().flex_1().min_h(0).px(14).py(10)
+          .child(div().text_size(12).text_color(t.muted).child("Reading the file…"));
+      }
+      // A file the Inbox cannot hand over — it was pruned from its store, or the thread it
+      // came in was — says so in its own words, and the thread is one row away.
+      if (v.state === "error") {
+        return v_flex().flex_1().min_h(0).px(14).py(10).gap(8)
+          .child(div().text_size(12).line_height(1.5).text_color(t.blocked)
+            .child(v.error || "The Inbox did not hand over this file."))
+          .child(inThread());
+      }
+      if (a.kind === "video") {
+        return v_flex().flex_1().min_h(0).px(14).py(10).gap(6)
+          .child(div().text_size(12).line_height(1.55).text_color(t.muted)
+            .child("A video plays in the Inbox, in your browser — the panel draws words and pictures."))
+          .child(row(`Play it in the browser${length ? ` (${length})` : ""}`,
+            `/api/inbox/attachments/${a.id}/video`, `${OWN}/video.svg`));
+      }
+      if (a.kind === "image") {
+        return v_flex().id("pl-view-pic").flex_1().min_h(0).w_full().overflow_y_scrollbar().p(10)
+          .items_center().gap(8)
+          .when(Boolean(v.file), (el) => el
+            .child(image(v.file.rel).w(this.pictureWidth(a, null)).rounded(6).cursor_pointer()
+              .on_click(() => openInbox(`/api/inbox/attachments/${a.id}/image`)))
+            .child(row("Open full size in the browser", `/api/inbox/attachments/${a.id}/image`,
+              `${OWN}/image.svg`)));
+      }
+      if (a.kind === "markdown") {
+        return v_flex().id("pl-view-doc").flex_1().min_h(0).w_full().overflow_y_scrollbar().px(14).py(10)
+          .child(v_flex().w_full().text_size(13.5).line_height(1.6)
+            .child(TextView.markdown(`pl-att-${a.id}`, v.text || "_(no words)_")));
+      }
+      // Code, a patch, and any other text the viewer shows: one fenced block — the same
+      // markdown the thread draws, so a file reads like the messages around it, with no
+      // editor's chrome over a thing the person cannot edit here.
+      if (asDocument(a) || !v.editor) {
+        return v_flex().id("pl-view-doc").flex_1().min_h(0).w_full().overflow_y_scrollbar().px(14).py(10)
+          .child(v_flex().w_full().text_size(13).line_height(1.5)
+            .child(TextView.markdown(`pl-att-src-${a.id}`, fenced(v.text, languageOf(a.name)))));
+      }
+      // Everything else that is words — a page's source, a log, a csv — is listed by the
+      // code view, which scrolls itself and keeps its line numbers. A web page is only ever
+      // its source here: the Inbox renders the page itself, and a row goes there.
+      return v_flex().id("pl-view-code").flex_1().min_h(0).w_full()
+        .when(a.kind === "html", (el) => el
+          .child(div().flex_none().px(14).pt(6).text_size(11).text_color(t.dim)
+            .child("A web page reads as its source here; the Inbox shows it as a page."))
+          .child(v_flex().px(6).pt(2).items_start().child(inThread())))
+        .when(Boolean(v.editor), (el) => el.child(v_flex().flex_1().min_h(0).w_full().px(6).py(4)
+          .child(Editor.new(v.editor))));
+    };
+    return v_flex().id("pl-view").flex_1().min_h(0).w_full().max_w(760)
+      .child(h_flex().id("pl-view-facts").h(24).flex_none().px(14).gap(6).items_center()
+        .border_b(1).border_color(t.border)
+        .child(div().flex_1().min_w(0).truncate().text_size(11).text_color(t.dim).child(facts.join(" · "))))
+      .child(body());
   }
 
   // ---- a file's menu ----
