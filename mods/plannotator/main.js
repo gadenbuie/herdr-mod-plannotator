@@ -994,14 +994,34 @@ export default class Plannotator extends View {
     // way to leave one.
     if (this.commenting) return;
     // Up and to the left is earlier in the page; anything else keeps the press as the end.
-    const earlier = Boolean(key) && (y < down.y - 0.5 || (Math.abs(y - down.y) <= 0.5 && x < down.x));
-    const end = earlier
-      ? { key, target, block, at: e?.local_position }
-      : { key: down.key, target: down.target, block: down.block, at: down.at };
-    this.aiming = {
-      key: end.key, target: end.target, block: end.block,
-      at: { x: Number(end.at?.x) || 0, y: Number(end.at?.y) || 0 },
-    };
+    const earlier = y < down.y - 0.5 || (Math.abs(y - down.y) <= 0.5 && x < down.x);
+    if (key && earlier) {
+      // The release is on a paragraph and came first: the bar goes there, where the person
+      // let go.
+      const at = e?.local_position ?? { x: 0, y: 0 };
+      this.aiming = { key, target, block, at: { x: Number(at.x) || 0, y: Number(at.y) || 0 } };
+    } else if (!key && earlier) {
+      // The release came off the paragraph upwards into the air around it, and that is the
+      // end of the highlight that comes first — with no paragraph there to draw a bar in, it
+      // is drawn in the panel's own box at the point the highlight reached, in the
+      // coordinates that box keeps. The words it is filed against are still the ones the
+      // drag started in: those are the ones the panel can quote.
+      const b = e?.bounds;
+      this.aiming = {
+        key: down.key, target: down.target, block: down.block, where: "root",
+        at: b
+          ? { x: (Number(x) || 0) - (Number(b.x) || 0), y: (Number(y) || 0) - (Number(b.y) || 0) }
+          : { x: down.at.x, y: 0 },
+      };
+    } else {
+      // Either the release is below where the drag started — the air under the paragraph, the
+      // card around it — and the press is the first end, or it is on a paragraph the highlight
+      // ran forwards into. Either way the bar goes where the drag started, in its paragraph.
+      this.aiming = {
+        key: down.key, target: down.target, block: down.block,
+        at: { x: Number(down.at.x) || 0, y: Number(down.at.y) || 0 },
+      };
+    }
     cx?.notify();
   }
 
@@ -1102,7 +1122,7 @@ export default class Plannotator extends View {
   // the block is what the comment is filed against, and its first line is the quote.
   renderNoteBlock(key, block, target) {
     const t = theme();
-    const bar = this.aiming?.key === key ? this.renderNoteBar() : null;
+    const bar = this.aiming?.key === key && this.aiming?.where !== "root" ? this.renderNoteBar() : null;
     const box = this.commenting?.key === key ? this.renderNoteField() : null;
     // The handlers are on the words as well as on the box around them: a press the text
     // takes for its own selection still reaches the element that owns it, and `aimUp` is
@@ -1883,6 +1903,10 @@ export default class Plannotator extends View {
                 .child(open ? "Files" : `Files · ${this.kids.has(at) ? kids(at).length : "…"}`)))
             .children(rows))
           .child(action("pick", "folder-plus", "Another folder…", () => this.pick())))))
+      // A bar whose highlight ended in the air around a paragraph has no paragraph to be
+      // drawn in, so it is drawn here, after the page: on top of it, at the point the drag
+      // reached. Last child on purpose — an earlier one would be behind the page.
+      .when(this.aiming?.where === "root", (el) => el.child(this.renderNoteBar()));
   }
 
   // ---- answering a question ----

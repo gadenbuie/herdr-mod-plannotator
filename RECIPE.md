@@ -84,8 +84,12 @@ the tree — sticks to its space and comes back with it.
   highlight — above the line, or under it when that is the paragraph's first
   line and there is no room above. A highlight that starts in one paragraph
   and runs into the next is a comment on the earlier of the two, with the
-  bar at its end, and one that ends in the air between two paragraphs is a
-  comment on the paragraph it started in. The bar becomes a field under that paragraph (the quote it
+  bar at its end. One that ends in the air around a paragraph — no paragraph
+  under the pointer — is still a comment, on the paragraph the drag started
+  in: the bar is drawn at the press when the drag ran down into the air, and
+  in the panel's own box, at the point the highlight reached, when the drag
+  ran up into it (a release event's `bounds` are the box the handler is on,
+  so the panel's own box turns a window position into a panel position). The bar becomes a field under that paragraph (the quote it
   stands for above it, the words in it, Cancel and Comment), and Comment
   files it in the band below, keeping the paragraph for the person to go on
   reading. A click anywhere else is a highlight put away, and the bar goes
