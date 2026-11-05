@@ -131,8 +131,8 @@ Nothing prunes them.
 
 A message that came with files shows them. A picture is drawn under the
 words at the size it was taken, with its name and size beneath it; every
-other file is a row — its kind's glyph, its name, its size — and so is a
-picture once it is clicked. Clicking either opens the file in the panel,
+other file is a row of its own, the width of the column: its kind's glyph,
+its name, its size, a chevron — and so is a picture once it is clicked. Clicking either opens the file in the panel,
 read-only: a markdown document as the markdown it is, code and a patch in
 the code view — line numbers, its language, a scroll of its own — any other
 text the same way, a picture at the panel's width. Nothing there edits,

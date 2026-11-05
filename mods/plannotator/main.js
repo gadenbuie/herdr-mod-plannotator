@@ -2018,10 +2018,10 @@ export default class Plannotator extends View {
       // as the agent wrote it, and the question cards follow the lot.
       .children(boxes)
       .children(asked.map((q) => this.renderQuestion(m, q)))
-      .when(atts.length > 0, (el) => el.child(v_flex().w_full().flex_none().gap(4).pt(2)
+      .when(atts.length > 0, (el) => el.child(v_flex().w_full().flex_none().gap(4).pt(3)
         .when(pics.length > 0, (s) => s.child(h_flex().gap(6).flex_wrap().items_start()
           .children(pics.map((a) => this.renderPicture(a)))))
-        .when(files.length > 0, (s) => s.child(h_flex().gap(4).flex_wrap()
+        .when(files.length > 0, (s) => s.child(v_flex().w_full().flex_none().gap(5)
           .children(files.map((a) => this.renderChip(a)))))))
       // A picture that could not be drawn says so, and says it as a link: it goes where the
       // picture is — the page on this thread — in `accent` with the same `file-text` the
@@ -2060,18 +2060,21 @@ export default class Plannotator extends View {
         .child(image(p.file.rel).w(px).rounded(6)));
   }
 
-  // One file an agent attached: the glyph its kind wears, its name, its size, and a click
-  // that opens it in the panel. This is the only thing in the thread that says what the
-  // agent sent — the words around it usually only say "attached".
+  // One file an agent attached: a row the whole column wide — the glyph its kind wears,
+  // its name, its size, and a chevron — and a click that opens it in the panel. This is the
+  // only thing in the thread that says what the agent sent, so it is a row of its own rather
+  // than a chip beside its neighbours: three chips in a 312 px column read as tags, and a tag
+  // is the one thing on this page a person does not think to press.
   renderChip(a) {
     const t = theme();
-    return h_flex().id(`pl-att-${a.id}`).h(22).flex_none().max_w(250).pl(5).pr(6).gap(5).rounded(5)
+    return h_flex().id(`pl-att-${a.id}`).h(30).w_full().flex_none().px(8).gap(8).rounded(6)
       .bg(t.popover).border_1().border_color(t.border)
       .hover((s) => s.bg(t.hover)).cursor_pointer()
       .on_click((_e, cx) => this.openAttachment(a, cx))
-      .child(svg(glyphOf(a.kind)).size(12).flex_none().text_color(t.muted))
-      .child(div().min_w(0).truncate().text_size(11.5).text_color(t.accent).child(a.name ?? "file"))
-      .child(div().flex_none().text_size(10.5).text_color(t.dim).child(sizeOf(a.size)));
+      .child(svg(glyphOf(a.kind)).size(14).flex_none().text_color(t.muted))
+      .child(div().flex_1().min_w(0).truncate().text_size(12.5).text_color(t.accent).child(a.name ?? "file"))
+      .child(div().flex_none().text_size(11).text_color(t.dim).child(sizeOf(a.size)))
+      .child(svg(`${ICONS}/chevron-right.svg`).size(12).flex_none().text_color(t.dim));
   }
 
   // A picture an agent attached, drawn in its message. Until its bytes land it is the same
