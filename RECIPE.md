@@ -391,6 +391,11 @@ the tree — sticks to its space and comes back with it.
   `:::question-multi` and `:::question-text`, so `wordsWithoutQuestions`
   matches all three — one that matched the bare fence only drew the whole
   block twice: as plain markdown above the card, and as the card.
+- **`hover` is a tint, not a fill.** It is opaque in one theme and a wash of
+  alpha in another, so `bg(t.popover)` plus `.hover(s => s.bg(t.hover))` is a
+  bar that goes see-through under the pointer in the person's graphite theme.
+  A row with no background of its own takes the tint; anything already filled
+  hovers by `opacity(0.88)` (the app's confirm buttons) or by its border.
 - **An `absolute()` element that hugs its text draws nothing.** The
   Comment bar came out as empty space until it was given `.w(112)`: a
   positioned box with no width resolves to zero, and nothing in the app
