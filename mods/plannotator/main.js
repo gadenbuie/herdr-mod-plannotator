@@ -1165,7 +1165,9 @@ export default class Plannotator extends View {
     // fill of its own would go see-through on hover in a theme that tints with alpha.
     const part = (id, onClick) => h_flex().id(id).h(20).flex_none().px(6).gap(5).items_center()
       .rounded(4).hover((s) => s.bg(t.hover)).cursor_pointer().on_click(onClick);
-    return h_flex().id("pl-note-bar").absolute().left(left).top(top).w(BAR_W).h(24).px(3).gap(2)
+    // The two shortcuts sit against the bar's right edge, with nothing between them and the
+    // border: the bar's padding is on its left only, and the slack goes into the middle.
+    return h_flex().id("pl-note-bar").absolute().left(left).top(top).w(BAR_W).h(24).pl(3).gap(2)
       .items_center().overflow_hidden().rounded(6).bg(t.popover).border_1().border_color(t.border)
       // No hover state on the bar itself: it appears under the pointer that was just dragging,
       // so the pointer is already on it, and anything it does on the way in reads as a flicker.
@@ -1173,11 +1175,15 @@ export default class Plannotator extends View {
       .child(part("pl-note-comment", (_e, cx) => this.openComment(cx))
         .child(svg(`${ICONS}/plus.svg`).size(11).flex_none().text_color(t.accent))
         .child(div().flex_none().text_size(11.5).text_color(t.foreground).child("Comment")))
+      .child(div().flex_1())
       .child(part("pl-note-trash", (_e, cx) => this.openComment(cx, "Please delete this"))
         .tooltip("Please delete this")
         .child(svg(`${OWN}/trash.svg`).size(12).flex_none().text_color(t.muted)))
-      .child(part("pl-note-thumbs-up", (_e, cx) => this.openComment(cx, "👍 Looks good"))
-        .tooltip("👍 Looks good")
+      // Square on the right, where it meets the border, and narrower on that side than the
+      // others: its box is the bar's edge.
+      .child(h_flex().id("pl-note-thumbs-up").h(20).flex_none().pl(6).pr(5).items_center()
+        .hover((s) => s.bg(t.hover)).cursor_pointer().tooltip("👍 Looks good")
+        .on_click((_e, cx) => this.openComment(cx, "👍 Looks good"))
         .child(svg(`${OWN}/thumbs-up.svg`).size(12).flex_none().text_color(t.muted)));
   }
 
