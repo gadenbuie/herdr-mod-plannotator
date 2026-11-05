@@ -79,14 +79,16 @@ the tree — sticks to its space and comes back with it.
   browser, and a web page is its source plus a row to the Inbox, which
   renders it; both say so.
 - **A comment, made**: a drag across a paragraph opens a "Comment" bar over
-  the line the drag started on — above it, or under it when that is the
-  paragraph's first line and there is no room above — and a drag that
-  starts in one paragraph and ends in the next is a comment on the one it
-  started in, with the bar at its start. The bar becomes a field under that
-  paragraph (the quote it stands for above it, the words in it, Cancel and
-  Comment), and Comment files it in the band below, keeping the paragraph
-  for the person to go on reading. A click anywhere else is a highlight put
-  away, and the bar goes with it.
+  the highlight's first line — which end that is comes from the two pointer
+  positions, so a drag that ran upwards still opens over the top of the
+  highlight — above the line, or under it when that is the paragraph's first
+  line and there is no room above. A highlight that starts in one paragraph
+  and runs into the next is a comment on the earlier of the two, with the
+  bar at its end. The bar becomes a field under that paragraph (the quote it
+  stands for above it, the words in it, Cancel and Comment), and Comment
+  files it in the band below, keeping the paragraph for the person to go on
+  reading. A click anywhere else is a highlight put away, and the bar goes
+  with it.
 - **The palette** (520×340 at the pointer): a search line over six rows —
   Annotate the last message, Review my changes, Annotate all files,
   Annotate another folder…, Open the Inbox, Open Plannotator as a tab —

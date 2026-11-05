@@ -975,19 +975,29 @@ export default class Plannotator extends View {
 
   // The bar, from the drag that ended here. A highlight can start in one paragraph and run
   // into the next, and the panel cannot see it at all (`blocksOf` says why) — so the comment
-  // goes on the paragraph the drag started in, and the bar is drawn at the point the drag
-  // started. The press names both; the release only says there was a drag.
-  aimUp(key, e, cx) {
+  // goes on a paragraph, and the bar is drawn at the end of the highlight that comes first in
+  // the page: a drag that ran upwards anchors at the end it started from, not at the pointer
+  // it began under. The two ends are the press and the release, and the window positions say
+  // which is higher, which is all a stack of paragraphs needs.
+  aimUp(key, e, target, block, cx) {
     const down = this.pressed;
     this.pressed = null;
     if (!down) return;
-    const moved = Math.hypot((Number(e?.position?.x) || 0) - down.x, (Number(e?.position?.y) || 0) - down.y);
-    if (moved < 4) return;
+    const x = Number(e?.position?.x) || 0, y = Number(e?.position?.y) || 0;
+    if (Math.hypot(x - down.x, y - down.y) < 4) return;
     // One comment at a time: a drag in another block while a field is open and being
     // typed in would throw those words away to offer a second bar, and Esc is already the
     // way to leave one.
     if (this.commenting) return;
-    this.aiming = { key: down.key, target: down.target, block: down.block, at: down.at };
+    // Up and to the left is earlier in the page; anything else keeps the press as the end.
+    const earlier = y < down.y - 0.5 || (Math.abs(y - down.y) <= 0.5 && x < down.x);
+    const end = earlier
+      ? { key, target, block, at: e?.local_position } 
+      : { key: down.key, target: down.target, block: down.block, at: down.at };
+    this.aiming = {
+      key: end.key, target: end.target, block: end.block,
+      at: { x: Number(end.at?.x) || 0, y: Number(end.at?.y) || 0 },
+    };
     cx?.notify();
   }
 
@@ -1092,17 +1102,17 @@ export default class Plannotator extends View {
     // idempotent because both of them are asked.
     return v_flex().id(`pl-blk-${key}`).w_full().flex_none().relative()
       .on_mouse_down("left", (e) => this.aimDown(key, e, target, block))
-      .on_mouse_up("left", (e, cx) => this.aimUp(key, e, cx))
+      .on_mouse_up("left", (e, cx) => this.aimUp(key, e, target, block, cx))
       .child(TextView.markdown(`pl-md-${key}`, block).selectable()
         .on_mouse_down("left", (e) => this.aimDown(key, e, target, block))
-        .on_mouse_up("left", (e, cx) => this.aimUp(key, e, cx)))
+        .on_mouse_up("left", (e, cx) => this.aimUp(key, e, target, block, cx)))
       .when(Boolean(bar), (el) => el.child(bar))
       .when(Boolean(box), (el) => el.child(box));
   }
 
-  // The bar the pointer opens, over the line the drag started on: one word, because there is
-  // one thing to do with a highlight here. Over rather than under, because the words under a
-  // highlight are the ones the person is reading; under it when that line is the block's
+  // The bar the pointer opens, over the first line of the highlight: one word, because there
+  // is one thing to do with a highlight here. Over rather than under, because the words under
+  // a highlight are the ones the person is reading; under it when that line is the block's
   // first and there is no room above — a bar above the first line would sit outside the
   // paragraph and be clipped by whatever clips it. It never runs past the column's right
   // edge either — a button off the panel is a button nobody can press — and it is given its
