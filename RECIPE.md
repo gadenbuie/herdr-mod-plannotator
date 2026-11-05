@@ -55,10 +55,12 @@ the tree — sticks to its space and comes back with it.
   240 px and no narrower than 130 — and a click opens the picture at its own
   size in a dialog over the window; the files an agent attached are the
   message's own: a picture drawn under the words with its name and size
-  beneath it, and every other file a row of its own — the column's width, its
-  kind's glyph, its name, its size, a chevron: three chips beside each other
-  read as tags, and a tag is the one thing on this page a person does not
-  think to press. A click on either opens the file. A picture whose path is not a file
+  beneath it, and every other file a card the width of the column, drawn as the
+  Inbox draws one: the kind's glyph in a square of its own, the name over
+  "Markdown · 1.2 KB", a chevron at the end. Under the lot, a count — "3
+  attachments" — the way the Inbox heads its cards. Chips side by side read as
+  tags, and a tag is the one thing on this page a person does not think to
+  press. A click on either opens the file. A picture whose path is not a file
   any more is counted instead, and the count leads to the Inbox. A refused
   send says why in the Inbox's own sentence.
 - **A file, opened**, is a page of its own under the thread: the header is

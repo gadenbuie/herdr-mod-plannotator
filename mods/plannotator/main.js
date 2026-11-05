@@ -339,6 +339,13 @@ function glyphOf(kind) {
   return `${ICONS}/file-text.svg`;
 }
 
+// What a kind of file is called in the panel, in the Inbox's own words: a card's second line
+// and a file page's first fact read the same.
+function kindOf(kind) {
+  return { image: "Picture", video: "Video", markdown: "Markdown", code: "Code", html: "Web page" }[kind]
+    ?? "Text";
+}
+
 // A file's size the way a person reads one: "640 B", "6.4 KB", "1.2 MB".
 function sizeOf(bytes) {
   const n = Number(bytes) || 0;
@@ -2018,7 +2025,13 @@ export default class Plannotator extends View {
       // as the agent wrote it, and the question cards follow the lot.
       .children(boxes)
       .children(asked.map((q) => this.renderQuestion(m, q)))
-      .when(atts.length > 0, (el) => el.child(v_flex().w_full().flex_none().gap(4).pt(3)
+      // The Inbox puts a paperclip and a count over its cards, and the count is what says the
+      // cards are the message's attachments rather than something the panel drew.
+      .when(atts.length > 0, (el) => el.child(v_flex().w_full().flex_none().gap(5).pt(3)
+        .child(h_flex().h(16).flex_none().gap(5).items_center()
+          .child(svg(`${ICONS}/files.svg`).size(11).flex_none().text_color(t.dim))
+          .child(div().text_size(11).text_color(t.dim)
+            .child(atts.length === 1 ? "1 attachment" : `${atts.length} attachments`)))
         .when(pics.length > 0, (s) => s.child(h_flex().gap(6).flex_wrap().items_start()
           .children(pics.map((a) => this.renderPicture(a)))))
         .when(files.length > 0, (s) => s.child(v_flex().w_full().flex_none().gap(5)
@@ -2060,20 +2073,26 @@ export default class Plannotator extends View {
         .child(image(p.file.rel).w(px).rounded(6)));
   }
 
-  // One file an agent attached: a row the whole column wide — the glyph its kind wears,
-  // its name, its size, and a chevron — and a click that opens it in the panel. This is the
-  // only thing in the thread that says what the agent sent, so it is a row of its own rather
-  // than a chip beside its neighbours: three chips in a 312 px column read as tags, and a tag
-  // is the one thing on this page a person does not think to press.
+  // One file an agent attached, drawn as the Inbox draws one: a card with its kind's glyph in
+  // a square of its own, its name over the kind and the size. Three of those in a 312 px
+  // column stack, which is what makes them pressable — a chip beside two others reads as a
+  // tag, and a tag is the last thing on a page a person thinks to click.
   renderChip(a) {
-    const t = theme();
-    return h_flex().id(`pl-att-${a.id}`).h(30).w_full().flex_none().px(8).gap(8).rounded(6)
+    const t = theme(), ext = extOf(a.name), kind = kindOf(a.kind);
+    return h_flex().id(`pl-att-${a.id}`).w_full().flex_none().gap(9).p(8).rounded(8)
       .bg(t.popover).border_1().border_color(t.border)
       .hover((s) => s.bg(t.hover)).cursor_pointer()
       .on_click((_e, cx) => this.openAttachment(a, cx))
-      .child(svg(glyphOf(a.kind)).size(14).flex_none().text_color(t.muted))
-      .child(div().flex_1().min_w(0).truncate().text_size(12.5).text_color(t.accent).child(a.name ?? "file"))
-      .child(div().flex_none().text_size(11).text_color(t.dim).child(sizeOf(a.size)))
+      .child(h_flex().size(26).flex_none().rounded(6).bg(t.background)
+        .items_center().justify_center()
+        .child(svg(glyphOf(a.kind)).size(14).flex_none().text_color(t.muted)))
+      .child(v_flex().flex_1().min_w(0).gap(1)
+        .child(div().truncate().text_size(12.5).font_semibold().text_color(t.foreground)
+          .child(a.name ?? "file"))
+        .child(div().truncate().text_size(11).text_color(t.dim)
+          // The Inbox names a code file's extension there, and it is the one thing that says
+          // why a patch opens plain: there is no such language.
+          .child(`${kind === "Code" ? `Code (.${ext})` : kind} · ${sizeOf(a.size)}`)))
       .child(svg(`${ICONS}/chevron-right.svg`).size(12).flex_none().text_color(t.dim));
   }
 
@@ -2095,8 +2114,7 @@ export default class Plannotator extends View {
   // listed — since that is what the person came here for.
   renderAttachment() {
     const t = theme(), v = this.viewing, a = v?.att ?? {};
-    const kind = { image: "Picture", video: "Video", markdown: "Document", code: "Code", html: "Web page" }[a.kind]
-      ?? "Text";
+    const kind = kindOf(a.kind);
     const facts = [kind];
     if (Number(a.width) && Number(a.height)) facts.push(`${a.width} × ${a.height}`);
     const length = durationOf(a.duration_ms);
