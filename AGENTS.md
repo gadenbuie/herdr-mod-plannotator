@@ -15,7 +15,8 @@ the code.
 
 - `mods/plannotator/main.js` — the whole mod, one `View`: the panel (no
   props), the palette (`props().mode === "palette"`), a tree row's menu
-  (`"menu"`). Seven `sh -c` scripts live in it: `ASK` (the Inbox over its
+  (`"menu"`), a picture at its own size (`"picture"`). Seven `sh -c`
+  scripts live in it: `ASK` (the Inbox over its
   loopback server), `OPEN` (the Inbox in the browser, by hash route or by
   resource), `PULL` (one attachment's bytes into the app's folder),
   `COPY` (an inline picture out of the person's files into the same
@@ -90,6 +91,12 @@ read it before changing anything here. The short list:
 - `saveState` writes `plannotator.state` only from the panel's own doings,
   and `syncState` adopts a value only when it differs from the last one
   this copy wrote or took — a copy's own echo must not re-adopt.
+- A dialog is another copy of the mod: no thread, no reply field, no
+  comments. The picture dialog hands a press back through
+  `setShared("plannotator.picture", {ask})` under the id the panel gave it
+  at `openPicture`, and the panel takes it at the top of a render — so the
+  field is made in a task, not in that render, and a stale ask from
+  `shared.json` is ignored rather than adopted.
 - Two shown copies both receive a key: the 500 ms `claimed` guard makes
   one press one run.
 

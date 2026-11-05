@@ -139,16 +139,26 @@ the file in the panel, read-only: a markdown document as the markdown it is,
 code and a patch in the code view — line numbers, its language, a scroll of
 its own — any other text the same way, a picture at the panel's width.
 Nothing there edits, downloads or uploads except the comment you write on
-it, and the back chevron (or Esc) returns to the thread it came in.
+it, and the back chevron (or Esc) returns to the thread it came in. A
+picture's page is the one file page with a row of its own: **Comment on
+this picture**, above it — a comment on the picture as a whole, quoted with
+its name.
 
 Pictures an agent writes *into* its words — `![alt](/tmp/shot.png)`, the
 path it just took — are drawn where it wrote them, between the paragraphs
 either side, centred in the column, as a thumbnail: never taller than 240 px
 and never narrower than 130, so a portrait screenshot stays a picture rather
 than a column of screen. Clicking one opens it at its own size in a dialog over the window,
-closed with Esc or its cross. The panel copies those files itself, so it
-shows the picture as the agent left it; when the path is not a file any
-more, a count takes its place under the words and leads to the Inbox.
+closed with Esc or its cross. A picture carries one row in that dialog —
+**Comment on this picture** — which closes the dialog and opens the comment's
+field under the picture in the thread (a window the picture's own size has no
+room for a field, and the comment waits for the reply that carries it). What
+the comment is filed on depends on what the picture is: an attached one is
+commented on as the file it is, quoted with its name, and one an agent wrote
+into its words — no file the Inbox has — is commented on as the message that
+wrote it, quoted with the `![…](…)` it wrote. The panel copies those files
+itself, so it shows the picture as the agent left it; when the path is not a
+file any more, a count takes its place under the words and leads to the Inbox.
 
 Two kinds the panel cannot show, and does not pretend to: a video opens in
 the browser where the Inbox's own player has it, and a web page shows its
@@ -182,7 +192,14 @@ quote is its first line: the panel cannot read your selection, and does not
 need to — a highlight that starts in one paragraph and runs into the next
 is a comment on the one it started in. A code file, which has no paragraphs to press, gets one row instead
 — **Comment on this file**, above the code view — and a markdown file takes
-a comment paragraph by paragraph, as a message does.
+a comment paragraph by paragraph, as a message does. A picture has nothing
+to press at all: its dialog and its page both carry **Comment on this
+picture**, which opens the field under the picture — under the row of
+thumbnails or the picture the agent wrote into its words, or under the
+picture on its page — and files the comment on the picture as a whole: on
+the attachment, quoted with its name and with no lines to name, the way the
+Inbox's own picture comment is, or on the message for a picture the agent
+wrote into its words, quoted with the markdown it wrote.
 
 Comment moves the words into the reply band at the bottom of the thread,
 with the line they are about and a ✕ to drop them, and saves them to the

@@ -73,6 +73,12 @@ const BADGE = "plannotator.waiting";
 // `saveState` writes it from the panel's own doings, `syncState` adopts it in
 // render(); null (or nothing there) is a fresh panel.
 const STATE = "plannotator.state";
+// The picture dialog's one word back to the panel. A dialog is a copy of this mod with no
+// thread, no reply field and no comments of its own, and it can only say that the person
+// pressed Comment on the picture it was opened with: the `ask` is the id the panel gave it at
+// `openPicture`, so a value whose ask this copy never wrote is another run's (or another
+// copy's) and is ignored. See `takePictureAsk`.
+const PICTURE = "plannotator.picture";
 // The Inbox's own list model, over its loopback server. The records in `STORE` say who
 // wrote what; only the Inbox's own arithmetic turns that into "New since you looked",
 // "Waiting on you" and "Quiet" — it writes `person_seen_seq`, so it, and not a second
@@ -537,7 +543,9 @@ function feedbackOf(notes) {
     const one = Number(t.line) || 0, two = Number(t.lines) || 0;
     const at = one && two > one ? ` lines ${one}-${two}` : one ? ` line ${one}` : "";
     const where = t.file ? `Comment on \`${t.file}\`${at}` : "Comment on your message";
-    const quote = n.quote ? `> ${n.quote}\n\n` : "";
+    // A picture's quote is its own name, which the line above has already said: quoting it
+    // again would read as two names for one file.
+    const quote = n.quote && n.quote !== t.file ? `> ${n.quote}\n\n` : "";
     return `**${where}:**\n\n${quote}${n.text}`;
   }).join("\n\n");
 }
@@ -554,15 +562,23 @@ function noteId() {
 // the record back; a refusal throws the Inbox's own sentence, which the band shows.
 async function postNote(note) {
   const t = note.target ?? {};
+  // A picture's comment is the Inbox's own shape for one — the block named "image", the
+  // picture's name in `originalText`, and no offsets, since there is no document under it to
+  // count characters in. Its `type` follows the block, the same as a paragraph's.
+  const image = t.blockId === "image";
+  // A picture written into a message is no block of it, but a message takes only a `COMMENT`
+  // with the words it is about, so the markdown the agent wrote for the picture is the quote
+  // and the picture is what makes it one.
+  const quote = String(note.quote ?? "");
   const annotation = {
     id: note.id,
     blockId: t.blockId ?? "",
     startOffset: 0,
-    endOffset: String(note.quote ?? "").length,
+    endOffset: image ? 0 : quote.length,
     // A comment on a whole file stands on no block: that is the Inbox's own general comment.
-    type: t.blockId ? "COMMENT" : "GLOBAL_COMMENT",
+    type: t.blockId || t.picture ? "COMMENT" : "GLOBAL_COMMENT",
     text: note.text,
-    originalText: note.quote ?? "",
+    originalText: quote,
     createdA: Date.now(),
   };
   if (t.kind === "file") {
@@ -639,6 +655,11 @@ export default class Plannotator extends View {
     // A file an agent attached, open in the panel: its own page, with the header's back
     // button returning to the thread. `null` while a thread or the list is on screen.
     this.viewing = null;
+    // The picture dialog this copy has open, if any: the `ask` it was opened with, the
+    // comment's key, what that comment is filed against and the name it quotes. The dialog
+    // hands back only the `ask`; everything a comment needs stays here, with the thread it
+    // belongs to (see `takePictureAsk`).
+    this.picture = null;
     // The bytes of the files this copy has read, by attachment id: the app-relative path
     // a picture is drawn from and the absolute one the code view reads. A file on disk
     // stays in here for the copy's life, so a thread read again costs no fetch.
@@ -1067,14 +1088,18 @@ export default class Plannotator extends View {
 
   // The field for a comment on one block — or on a whole file, which has no block to press
   // in: the code view is the `Editor`'s, and the row under the facts is its way in.
-  openCommentOn(key, target, block, cx) {
+  // `quote` names the line the comment stands for, and is `quoteOf(block)` unless the anchor
+  // already is one line the panel must not reword: a picture's own name.
+  openCommentOn(key, target, block, cx, quote = null) {
     this.closeComment(cx);
-    const field = TextareaState.new({ placeholder: "What about it?" });
+    const field = TextareaState.new({
+      placeholder: target?.blockId === "image" || target?.picture ? "What about this picture?" : "What about it?",
+    });
     field.set_auto_grow(3, 6);
     field.on("submit", (e, cx) => { if (e?.secondary === true) this.saveNote(cx); });
     field.on("focus", (_e, cx) => { this.writing = true; cx.notify(); });
     field.on("blur", (_e, cx) => { this.writing = false; cx.notify(); });
-    this.commenting = { key, target, block, quote: quoteOf(block), field };
+    this.commenting = { key, target, block, quote: quote ?? quoteOf(block), field };
     this.pressed = null;
     cx?.notify();
     // The caret goes in once the frame that draws the field is there: a field made and
@@ -1248,7 +1273,10 @@ export default class Plannotator extends View {
     const t = theme();
     const one = Number(n.target?.line) || 0, two = Number(n.target?.lines) || 0;
     const at = one && two > one ? `:${one}-${two}` : one ? `:${one}` : "";
-    const where = [`${n.target?.file ?? ""}${at}`, n.quote].filter(Boolean).join(" · ");
+    // A picture's quote is the picture's name, which the row already carries as the file: the
+    // same name twice on one row reads as two things.
+    const said = n.quote && n.quote !== n.target?.file ? n.quote : "";
+    const where = [`${n.target?.file ?? ""}${at}`, said].filter(Boolean).join(" · ");
     return h_flex().id(`pl-note-${n.id}`).w_full().flex_none().gap(6).items_start().p(6).rounded(6)
       .bg(t.background)
       .child(svg(`${ICONS}/square-pen.svg`).size(11).flex_none().mt(1).text_color(t.dim))
@@ -1453,10 +1481,46 @@ export default class Plannotator extends View {
   // Esc or its cross. The panel's column is 368 px, which makes a full screenshot a stamp —
   // so the thumbnail is the way in and this is the way to read it. No bigger than 820×560 —
   // the window is 705 px tall, and a dialog taller than that is a dialog with its picture
-  // cut off — shrunk to fit when the picture is larger.
+  // cut off — shrunk to fit when the picture is larger. The dialog's chrome (its name row,
+  // the one row under the picture, padding and gaps) is what the height adds: a picture's
+  // box is the picture's own height and nothing else, so anything less clips it.
+  //
+  // A picture can take a comment, and the dialog under it carries the way in; what that
+  // comment is filed against is decided here and kept here, because the dialog is another
+  // copy of the mod and knows none of it. A picture the Inbox holds as an attachment is filed
+  // on the attachment, in the shape its own picture comment has; a picture an agent wrote into
+  // its words is no record the Inbox has, so the comment is on the message that wrote it,
+  // quoted with the markdown it wrote.
   openPicture(shot) {
     const rel = String(shot?.rel ?? "");
     if (!rel) return null;
+    const id = String(shot?.attachmentId ?? ""), msg = String(shot?.messageId ?? "");
+    const name = String(shot?.name ?? "");
+    const ask = `ask-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+    const thread = this.opened?.id ?? null;
+    this.picture = id
+      ? {
+        ask, key: `pic-${id}`, thread,
+        target: {
+          kind: "file", file: name || "this picture", attachmentId: id,
+          // The copy on screen is the one the Inbox kept for the send, which is the version
+          // its annotations are filed against.
+          version: String(shot?.version || "current"),
+          // And a comment on a picture is the Inbox's own shape for one: its block is named
+          // "image", its name is the quote, and there are no offsets to give.
+          blockId: "image",
+        },
+        quote: name || "this picture",
+      }
+      : msg
+        ? {
+          ask, key: String(shot?.key || `pic-m-${msg}`), thread,
+          // No block: the picture stands between paragraphs, and the words the comment quotes
+          // are the markdown the agent wrote for it.
+          target: { kind: "message", messageId: msg, blockId: "", picture: true },
+          quote: String(shot?.quote || name || "this picture"),
+        }
+        : null;
     const w = Number(shot?.width) || 0, h = Number(shot?.height) || 0;
     const fit = w > 0 && h > 0 ? Math.min(1, 820 / w, 560 / h) : 1;
     const dw = w > 0 ? Math.round(w * fit) : 720;
@@ -1465,8 +1529,29 @@ export default class Plannotator extends View {
       mod: "plannotator",
       kind: "dialog",
       width: dw + 24,
-      height: dh + 56,
-      props: { mode: "picture", file: rel, name: String(shot?.name ?? ""), w: dw, h: dh },
+      height: dh + (this.picture ? 86 : 56),
+      props: {
+        mode: "picture", file: rel, name, w: dw, h: dh,
+        ask: this.picture?.ask ?? "",
+      },
+    });
+  }
+
+  // The dialog's one press, read at the top of a panel render: it hands back the `ask` this
+  // copy opened it with, and the comment's field appears under the picture. The field is made
+  // in a task, not here — a `TextareaState` made in a render throws — and the picture and its
+  // thread must still be the ones the dialog was opened on: a field for a picture that is no
+  // longer on screen has nothing to be under, and a comment made here would land in another
+  // thread's band.
+  takePictureAsk(cx) {
+    const p = this.picture, back = shared(PICTURE) ?? null;
+    if (!p || String(back?.ask ?? "") !== p.ask) return;
+    this.picture = null;
+    if (!this.opened || p.thread !== this.opened.id) return;
+    cx.spawn(async (cx) => {
+      await cx.sleep(1);
+      if (!this.opened || p.thread !== this.opened.id) return;
+      this.openCommentOn(p.key, p.target, "", cx, p.quote);
     });
   }
 
@@ -1786,6 +1871,9 @@ export default class Plannotator extends View {
     // this is where carried state is adopted, so the view is the arriving space's
     // from its first frame.
     this.syncState(cx);
+    // And what the picture dialog says back, if one was open when the person pressed
+    // Comment: no gesture of theirs is running now, so this is where a hand-off is taken.
+    this.takePictureAsk(cx);
     const t = theme(), at = this.folder, near = at ? at.replace(home(), "~") : null;
     const waiting = this.threads.slice(0, SHOWN), more = this.threads.length - waiting.length;
     // The chip counts what needs an answer, the one thing the dots say has to be acted on.
@@ -2521,6 +2609,12 @@ export default class Plannotator extends View {
           .children(pics.map((a) => this.renderPicture(a)))))
         .when(files.length > 0, (s) => s.child(v_flex().w_full().flex_none().gap(5)
           .children(files.map((a) => this.renderChip(a)))))))
+      // The field for a comment made on an attached picture, from the picture's dialog: it
+      // draws under the row of them — a field is the width of the message and that row wraps a
+      // picture beside a picture. A picture the agent wrote into its words draws its own field
+      // under itself (`renderInline`).
+      .when(pics.some((a) => this.commenting?.key === `pic-${a.id}`),
+        (el) => el.child(v_flex().w_full().flex_none().child(this.renderNoteField())))
       // A picture that could not be drawn says so, and says it as a link: it goes where the
       // picture is — the page on this thread — in `accent` with the same `file-text` the
       // row at the bottom of the page wears, so "this opens the Inbox" reads the same in
@@ -2544,6 +2638,9 @@ export default class Plannotator extends View {
   // portrait screenshot — and agents take a lot of those — is a stamp here rather than a
   // column of screen it never earned. The click is on the box around the picture, not on
   // the picture: a native image element takes styles but does not itself take a press.
+  // A comment on one is a comment on the message that wrote it, quoted with the markdown the
+  // agent wrote for it — the picture itself is no record the Inbox has, and the person's own
+  // message is not something to write back to them about.
   renderInline(m, p) {
     const px = this.pictureWidth(p.file, PICTURE_CAP);
     return v_flex().id(`pl-in-${m?.id}-${p.i}`).w_full().flex_none().items_center()
@@ -2554,8 +2651,17 @@ export default class Plannotator extends View {
           name: p.alt,
           width: p.file.width,
           height: p.file.height,
+          // The comment is on the message, and its field is drawn under this picture and no
+          // other — a message can hold two.
+          key: `pic-m-${m?.id}-${p.i}`,
+          messageId: m?.author?.kind === "person" ? "" : String(m?.id ?? ""),
+          quote: `![${String(p.alt ?? "")}](${String(p.url ?? "")})`,
         }))
-        .child(image(p.file.rel).w(px).rounded(6)));
+        .child(image(p.file.rel).w(px).rounded(6)))
+      // The comment made on this picture, from its dialog: right under it, where the pointer
+      // that opened the picture was.
+      .when(this.commenting?.key === `pic-m-${m?.id}-${p.i}`,
+        (el) => el.child(v_flex().w_full().flex_none().pt(2).child(this.renderNoteField())));
   }
 
   // One file an agent attached, drawn as the Inbox draws one: a card with its kind's glyph in
@@ -2587,10 +2693,29 @@ export default class Plannotator extends View {
     const t = theme(), file = this.files.get(a.id);
     if (!file) return this.renderChip(a);
     return v_flex().id(`pl-pic-${a.id}`).flex_none().gap(3).cursor_pointer()
-      .on_click(() => this.openPicture({ rel: file.rel, name: a.name, width: a.width, height: a.height }))
+      .on_click(() => this.openPicture({
+        rel: file.rel, name: a.name, width: a.width, height: a.height,
+        attachmentId: a.id, version: a.sent_sha256,
+      }))
       .child(image(file.rel).w(this.pictureWidth(a)).rounded(6))
       .child(div().text_size(10.5).text_color(t.accent).truncate()
         .child(`${a.name ?? "picture"} · ${sizeOf(a.size)}`));
+  }
+
+  // The row that opens a comment on a whole file: the code view has no paragraph to press,
+  // and a picture has nothing to press at all. It sits above what it is about, counts the
+  // comments already made on the same file that the Send will carry, and its `key` is what
+  // the field is drawn under.
+  noteRow(key, target, quote, label, mine = 0) {
+    const t = theme();
+    return h_flex().id(`pl-note-add-${key}`).h(22).flex_none().px(14).gap(6).items_center()
+      .hover((s) => s.bg(t.hover)).cursor_pointer()
+      .on_click((_e, cx) => this.openCommentOn(key, target, "", cx, quote))
+      .child(svg(`${ICONS}/plus.svg`).size(11).flex_none().text_color(t.dim))
+      .child(div().flex_none().text_size(11.5).text_color(t.muted).child(label))
+      .child(div().flex_1())
+      .when(mine > 0, (el) => el.child(div().flex_none().text_size(10.5).text_color(t.accent)
+        .child(mine === 1 ? "1 goes with your reply" : `${mine} go with your reply`)));
   }
 
   // A file on the panel's own page: read-only, and only ever read. The header above names
@@ -2635,16 +2760,29 @@ export default class Plannotator extends View {
             `/api/inbox/attachments/${a.id}/video`, `${OWN}/video.svg`));
       }
       if (a.kind === "image") {
-        return v_flex().id("pl-view-pic").flex_1().min_h(0).w_full().overflow_y_scrollbar().p(10)
-          .items_center().gap(8)
-          .when(Boolean(v.file), (el) => el
-            .child(h_flex().id("pl-view-pic-b").flex_none().rounded(6).cursor_pointer()
-              .on_click(() => this.openPicture({
-                rel: v.file.rel, name: a.name, width: a.width, height: a.height,
-              }))
-              .child(image(v.file.rel).w(this.pictureWidth(a, null)).rounded(6)))
-            .child(row("Open full size in the browser", `/api/inbox/attachments/${a.id}/image`,
-              `${OWN}/image.svg`)));
+        // A picture takes the one thing this page can add to a file, and takes it as a whole:
+        // there is no document under the picture to name a place in, so the comment is the
+        // Inbox's own whole-image one, quoted with the picture's name.
+        const key = `pic-${a.id}`;
+        const mine = this.notes.filter((n) => n.target?.attachmentId === a.id);
+        return v_flex().id("pl-view-pic-wrap").flex_1().min_h(0).w_full()
+          .when(Boolean(v.file), (el) => el.child(this.noteRow(key, {
+            kind: "file", file: a.name ?? "this picture", attachmentId: a.id,
+            version: a.sent_sha256 || "current", blockId: "image",
+          }, a.name ?? "this picture", "Comment on this picture", mine.length)))
+          .child(v_flex().id("pl-view-pic").flex_1().min_h(0).w_full().overflow_y_scrollbar().p(10)
+            .items_center().gap(8)
+            .when(Boolean(v.file), (el) => el
+              .child(h_flex().id("pl-view-pic-b").flex_none().rounded(6).cursor_pointer()
+                .on_click(() => this.openPicture({
+                  rel: v.file.rel, name: a.name, width: a.width, height: a.height,
+                  attachmentId: a.id, version: a.sent_sha256,
+                }))
+                .child(image(v.file.rel).w(this.pictureWidth(a, null)).rounded(6)))
+              .child(row("Open full size in the browser", `/api/inbox/attachments/${a.id}/image`,
+                `${OWN}/image.svg`))))
+          .when(this.commenting?.key === key,
+            (el) => el.child(v_flex().w_full().flex_none().px(12).pb(4).child(this.renderNoteField())));
       }
       // Code, a patch and every other text file is listed by the code view, which scrolls
       // itself, keeps its line numbers and knows the file's language by its name. A web
@@ -2657,19 +2795,12 @@ export default class Plannotator extends View {
         const key = `file-${a.id}`;
         const mine = this.notes.filter((n) => n.target?.attachmentId === a.id);
         return v_flex().id("pl-view-code").flex_1().min_h(0).w_full()
-          .child(h_flex().id("pl-note-add").h(22).flex_none().px(14).gap(6).items_center()
-            .hover((s) => s.bg(t.hover)).cursor_pointer()
-            .on_click((_e, cx) => this.openCommentOn(key, {
-              kind: "file", file: a.name ?? "this file", attachmentId: a.id,
-              // The copy the person is reading is the one the Inbox kept for the send, and
-              // that is the version its annotations are filed against.
-              version: a.sent_sha256 || "current", blockId: "",
-            }, "", cx))
-            .child(svg(`${ICONS}/plus.svg`).size(11).flex_none().text_color(t.dim))
-            .child(div().flex_none().text_size(11.5).text_color(t.muted).child("Comment on this file"))
-            .child(div().flex_1())
-            .when(mine.length > 0, (el) => el.child(div().flex_none().text_size(10.5).text_color(t.accent)
-              .child(mine.length === 1 ? "1 goes with your reply" : `${mine.length} go with your reply`))))
+          .child(this.noteRow(key, {
+            kind: "file", file: a.name ?? "this file", attachmentId: a.id,
+            // The copy the person is reading is the one the Inbox kept for the send, and
+            // that is the version its annotations are filed against.
+            version: a.sent_sha256 || "current", blockId: "",
+          }, "", "Comment on this file", mine.length))
           .when(this.commenting?.key === key, (el) => el.child(v_flex().px(12).pb(4).child(this.renderNoteField())))
           .when(a.kind === "html", (el) => el
             .child(div().flex_none().px(14).pt(6).text_size(11).text_color(t.dim)
@@ -2736,10 +2867,14 @@ export default class Plannotator extends View {
   // A picture at its own size, in a dialog the panel opened: the name it was sent under, the
   // way out (Esc closes a dialog by itself; the cross is for the pointer), and the picture.
   // `image()` keeps the file's shape when only its width is set, which is why the width is
-  // all it is given — the height came from the file and sized the dialog.
+  // all it is given — the height came from the file and sized the dialog. Under a picture the
+  // Inbox holds as an attachment, one row: the way to comment on it. There is no field in
+  // here — the dialog is the picture's own size and a field would cut it off — so the press
+  // hands the `ask` back to the panel and closes, and the field opens under the picture in
+  // the thread, where the words have somewhere to go and the reply they ride behind.
   renderPicturePage() {
     const t = theme(), p = props() ?? {};
-    const file = String(p.file ?? ""), name = String(p.name ?? "");
+    const file = String(p.file ?? ""), name = String(p.name ?? ""), ask = String(p.ask ?? "");
     const w = Number(p.w) || 720;
     return v_flex().id("pl-picture").w_full().h_full().bg(t.popover).gap(8).p(12)
       .child(h_flex().flex_none().gap(8).items_center()
@@ -2752,6 +2887,27 @@ export default class Plannotator extends View {
           .on_click(() => this.close())
           .child(svg(`${ICONS}/x.svg`).size(12).flex_none().text_color(t.muted))))
       .child(v_flex().flex_1().min_h(0).w_full().items_center().justify_center()
-        .child(image(file).w(w).rounded(6)));
+        .child(image(file).w(w).rounded(6)))
+      // No background of its own, so the theme's hover tint is what it takes: a filled row
+      // tinted with alpha would go see-through under the pointer.
+      .when(Boolean(ask), (el) => el.child(h_flex().id("pl-picture-note").h(22).flex_none().px(8)
+        .gap(7).items_center().rounded(5).hover((s) => s.bg(t.hover)).cursor_pointer()
+        .on_click((_e, cx) => this.askPicture(ask, cx))
+        .child(svg(`${ICONS}/square-pen.svg`).size(12).flex_none().text_color(t.accent))
+        .child(div().text_size(11.5).text_color(t.accent).child("Comment on this picture"))
+        .child(div().flex_1())
+        .child(div().text_size(10.5).text_color(t.dim).child("goes with your reply"))));
+  }
+
+  // The dialog's one press: the `ask` it was opened with goes back through the shared key
+  // every copy re-renders on, and the dialog closes — the field it opens belongs in front of
+  // the person, not behind a picture. Nothing else is written here: the panel holds the
+  // thread, the attachment and its version, and the dialog holds only a picture and a word.
+  askPicture(ask, cx) {
+    if (!ask) return;
+    setShared(PICTURE, { ask });
+    const overlay = props()?.overlay;
+    if (overlay) closeOverlay(overlay);
+    else cx?.notify();
   }
 }

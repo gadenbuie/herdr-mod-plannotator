@@ -66,6 +66,12 @@ the tree — sticks to its space and comes back with it.
   press. A click on either opens the file. A picture whose path is not a file
   any more is counted instead, and the count leads to the Inbox. A refused
   send says why in the Inbox's own sentence.
+- **The picture dialog** is the picture at its own size, over the window (no
+  bigger than 820×560, shrunk to fit), with the name it was sent under, Esc
+  and a cross in its top row — and one row under it: a pen and **Comment on
+  this picture**, with "goes with your reply" at the right edge. That row
+  closes the dialog and opens the comment's field under the picture in the
+  thread, because a window the picture's own size has no room for one.
 - **A file, opened**, is a page of its own under the thread: the header is
   the back chevron and the file's name, a `dim` row under it says what kind
   of file it is, how big, and for a picture or a film its size in pixels and
@@ -74,10 +80,10 @@ the tree — sticks to its space and comes back with it.
   numbers, its language by extension, and a scroll of its own rather than
   the panel's. A picture is drawn at the panel's width. Read-only: nothing
   here edits, downloads or uploads. The one write is a comment on the
-  file — a row above the code view, and for markdown a press-and-release in
-  a paragraph, as in a thread. A video is a row that plays it in the
-  browser, and a web page is its source plus a row to the Inbox, which
-  renders it; both say so.
+  file — a row above the code view, the same row above a picture, and for
+  markdown a press-and-release in a paragraph, as in a thread. A video is a
+  row that plays it in the browser, and a web page is its source plus a row
+  to the Inbox, which renders it; both say so.
 - **A comment, made**: a drag across a paragraph opens a "Comment" bar over
   the highlight's first line — which end that is comes from the two pointer
   positions, so a drag that ran upwards still opens over the top of the
@@ -181,6 +187,21 @@ the tree — sticks to its space and comes back with it.
   lines to name. Nothing else has to be true of the markdown
   for this to hold: a block cut at a blank line renders as the same
   markdown it did inside the whole.
+- **A picture has no document under it, so its comment is the whole
+  picture.** The row that opens it is in the picture's dialog and above the
+  picture on its page — "Comment on this picture" — and the field it opens
+  draws under the picture: under the row of a message's attached pictures,
+  under the picture the agent wrote into its words, under the picture on its
+  page. What is filed is, for an attached picture, the
+  shape the Inbox's own picture comment has: `blockId: "image"`,
+  `type: "COMMENT"`, the picture's name in `originalText` and no offsets
+  (`postNote` skips the end offset it gives a block). A picture written into
+  a message is no record the Inbox has, so its comment is a comment on the
+  message — `type: "COMMENT"`, no `blockId`, and the `![alt](path)` the
+  agent wrote as the quote — because a message takes no `GLOBAL_COMMENT`
+  (`saveMessageAnnotation` refuses one). A picture is the one thing with
+  nothing to select and nowhere to click in it, which is why the row exists
+  rather than a press-and-release on the image.
 - **A comment is saved as it is made, and carries on the Send.** Comment
   puts the words in the reply band — quote, words, ✕, and no other edit,
   because the words are the band's to carry now — and POSTs the annotation
@@ -194,7 +215,9 @@ the tree — sticks to its space and comes back with it.
   the words the person highlighted, not a separate record to go and find.
   A comment on a file is headed `**Comment on \`spec.md\` lines 3-5:**` (or
   `line 3`, or no lines for the whole file), the quote under it, the words
-  under that.
+  under that; a comment on a picture is headed for the picture's name (or
+  for the message, when the agent wrote the picture into its words), and
+  the quote is left out where it would only say the name again.
   An id the Inbox does not know refuses the whole reply, so the reply goes
   out again without `annotation_ids` and the words still arrive in
   `feedback`. A reply that only comments is a reply.
@@ -269,7 +292,9 @@ the tree — sticks to its space and comes back with it.
 
 - `mods/plannotator/main.js` — the whole mod, one `View`: no props is the
   panel; `props().mode === "palette"` the palette; `"menu"` a tree row's
-  menu. Those two are `openOverlay` popups, closed with
+  menu; `"picture"` a picture at its own size, which `openPicture` opens as
+  a `dialog` with the file, its size and the `ask` it is handed back. The
+  palette and the menu are `openOverlay` popups closed with
   `closeOverlay(props().overlay)` — the id is not the mod's name. The
   thread page is `TextView.markdown` per message, so the agents' markdown
   arrives as markdown. The reply field is a `TextareaState` with
@@ -442,6 +467,22 @@ the tree — sticks to its space and comes back with it.
   panel's root, with `stop_propagation` on the bar and on the comment
   field so neither closes itself by being clicked (the same shape the
   folder's pen uses).
+- **A dialog is another copy of the mod, with none of the panel's state.**
+  The picture dialog has no thread, no reply field and no comments of its
+  own, and the app hands it nothing back when it closes — so the press that
+  comments on a picture goes through `setShared("plannotator.picture",
+  {ask})`, and the panel takes it at the top of its next render
+  (`takePictureAsk`). The `ask` is the panel's own id, made in `openPicture`
+  and given to the dialog as a prop: a value whose ask this copy never
+  wrote is another run's — `shared` is persisted, so yesterday's would
+  otherwise arrive on the next thread the person opens — and is ignored.
+  What the comment is filed against stays in the panel too (`this.picture`,
+  with its thread), which is why the dialog can only say "comment on this",
+  never where. **The field is made in a task, not in that render**: a
+  `TextareaState` made while drawing throws, and the render is what takes
+  the hand-off. The dialog closes itself with `closeOverlay(props().overlay)`
+  — and a copy opened by `mod.open` carries that same prop, so a diagnostic
+  copy of the panel that runs the press closes itself.
 
 ## Done when
 
@@ -470,7 +511,12 @@ the tree — sticks to its space and comes back with it.
 - A file's page has "Comment on this file": the comment is a
   `GLOBAL_COMMENT` on the attachment's sent version, and it carries on the
   next Send the same way. A markdown file's paragraphs take a comment
-  like a message's do.
+  like a message's do. A picture's page has "Comment on this picture", and
+  so does the dialog a picture opens in — attached or written into the
+  words: the row there closes the dialog and puts the field under the
+  picture in the thread, and what is saved is a `COMMENT` quoted with the
+  picture's name (or, for a written-in picture, the message's comment quoted
+  with its markdown), and it carries on the next Send like any other.
 - A reply under words the person never saw is refused with the Inbox's
   own sentence, the words stay, and the thread re-reads to show what
   moved it.
