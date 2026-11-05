@@ -140,9 +140,12 @@ the tree — sticks to its space and comes back with it.
   usually gone by the time the person reads the thread, so what is drawn is
   the copy the Inbox kept: `GET attachments/<id>?version=sent` for the words,
   `<id>/image` and `<id>/video` for the bytes. Each is pulled once into
-  `~/.config/herdr-app/data/plannotator/att/`, named `<id>-<hash8>.<ext>`,
-  and a file already there is the answer — a sent attachment cannot change.
-  Nothing prunes that folder. A file the Inbox no longer has says so on its
+  `~/.config/herdr-app/data/plannotator/att/<thread>/`, named
+  `<id>-<hash8>.<ext>`, and a file already there is the answer — a sent
+  attachment cannot change. The copies are a cache for what is on screen,
+  not an archive: a thread's folder goes when the person leaves the thread,
+  and the panel clears the whole folder when it starts, so nothing piles up.
+  A file the Inbox no longer has says so on its
   page and offers the thread; a thread whose pictures cannot be read keeps
   their rows. Pictures are pulled when a thread opens (once each, then kept)
   so a message can draw them; every other kind is read only when the person
@@ -153,7 +156,8 @@ the tree — sticks to its space and comes back with it.
   thread is about. `TextView` cannot load an image, so the picture is copied
   into the app's folder (`<cksum of the path>.<ext>`) and the message is
   drawn in pieces: the markdown between one picture and the next, and the
-  picture between them, which is where the agent wrote it. `COPY` also says
+  picture between them, which is where the agent wrote it, centred in the
+  column. `COPY` also says
   how many pixels the file is — `sips` where it exists, `file` after that —
   because `image()` cannot be asked, and without it a portrait screenshot at
   the panel's width is a column of screen: 240 px of height and 130 px of
@@ -162,7 +166,8 @@ the tree — sticks to its space and comes back with it.
   again — so a copy older than its source is replaced (`[ "$src" -nt
   "$dest" ]`). A path that is gone stays a count under the words, and the
   count goes to the Inbox's own page, which has the picture if anything
-  does.
+  does. The click is on a box around the picture, not on the picture: an
+  `image()` takes styles, but a press lands on a `div()` or an `h_flex()`.
 - **The rest of an answer is a page away.** "Open in Inbox for picks and
   pictures" (and the header's page button) opens the Inbox at
   `#thread=<id>` through `plannotator inbox --background`, which prints the

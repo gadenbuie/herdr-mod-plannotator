@@ -141,9 +141,9 @@ it came in.
 
 Pictures an agent writes *into* its words — `![alt](/tmp/shot.png)`, the
 path it just took — are drawn where it wrote them, between the paragraphs
-either side, as a thumbnail: never taller than 240 px and never narrower
-than 130, so a portrait screenshot stays a picture rather than a column of
-screen. Clicking one opens it at its own size in a dialog over the window,
+either side, centred in the column, as a thumbnail: never taller than 240 px
+and never narrower than 130, so a portrait screenshot stays a picture rather
+than a column of screen. Clicking one opens it at its own size in a dialog over the window,
 closed with Esc or its cross. The panel copies those files itself, so it
 shows the picture as the agent left it; when the path is not a file any
 more, a count takes its place under the words and leads to the Inbox.
@@ -154,10 +154,12 @@ source with a row to the Inbox, which renders it.
 
 The attachment bytes come from the Inbox, not from the path the agent
 named — that file is usually gone by the time you read the thread, and the
-Inbox kept what it sent. They are cached in
-`~/.config/herdr-app/data/plannotator/att/`, one file per attachment named
-by its hash; a picture written into the words lands in the same folder,
-named by its path. Nothing prunes them.
+Inbox kept what it sent. They are cached under
+`~/.config/herdr-app/data/plannotator/att/<thread>/`, one file per
+attachment named by its hash; a picture written into the words lands in the
+same folder, named by its path. The copies are a cache, not an archive: a
+thread's folder is deleted when you leave the thread, and the whole folder
+is cleared when the panel starts.
 
 ## Plannotator
 

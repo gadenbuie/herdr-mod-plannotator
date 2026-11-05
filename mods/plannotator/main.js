@@ -41,6 +41,17 @@ const OWN = "mods/plannotator";
 // so a path in the person's home draws nothing at all — and the path an agent named is
 // usually gone by the time the person reads the thread anyway.
 const ATT = () => `${appHome()}/data/plannotator/att`;
+// The copies of a thread's files are a cache for what is on screen, not an archive: one
+// folder per thread, deleted when the person leaves the thread. `$1` is that folder's name
+// and `$2` the cache root; anything that is not a thread id prunes nothing, because a shell
+// script that removes a folder should not be talked into removing another one.
+const PRUNE = `
+case "$1" in
+  msg_*) [ -n "$2" ] && rm -rf "$2/$1" ;;
+  all) [ -n "$2" ] && rm -rf "$2"/* ;;
+esac
+printf '{"ok":1}'
+`;
 // How tall a picture may be where it sits in a message: a screenshot reads as a screenshot,
 // and the click opens it at its own size. A portrait one at the panel's full width would be
 // a column of screen the words never asked for.
@@ -551,6 +562,9 @@ export default class Plannotator extends View {
     if (this.mode === "menu") this.handle.focus();
     // The palette and the menus hold no data of their own: the panel reads the store.
     if (this.mode !== "panel") return;
+    // Whatever a last run left copied into the cache is no copy this one is drawing: the
+    // files come back a thread at a time, as the person asks for them.
+    exec("sh", ["-c", PRUNE, "plannotator", "all", ATT()]).catch(() => {});
     this.reload(cx);
     // What the runs decided while the panel was shut is the first thing it says.
     this.announce(cx);
@@ -633,8 +647,10 @@ export default class Plannotator extends View {
   // model (`GET threads/<id>`, the request its page makes for a thread) rather than
   // from the store: the records say what was written, not what it adds up to.
   openThread(id, cx) {
-    // A file open in the panel belongs to the thread leaving the screen.
+    // A file open in the panel belongs to the thread leaving the screen, and so do the
+    // copies of that thread's pictures.
     this.releaseViewer();
+    if (this.opened?.id && this.opened.id !== id) this.prune(this.opened.id);
     this.opened = { id, thread: null, error: null };
     this.cursor = 0;
     // A new thread starts with an empty field: what was half-written in another one is
@@ -790,8 +806,11 @@ export default class Plannotator extends View {
       return true;
     }
     if (!this.opened) return false;
+    const left = this.opened.id;
     this.opened = null;
     this.cursor = 0;
+    // Out of the thread, out with its pictures: the copies were for what was on screen.
+    this.prune(left);
     // The field is a thread's, so the keys are the panel's again: a `writing` left true
     // would keep ↑/↓ dead on a page that draws no field.
     this.writing = false;
@@ -808,7 +827,7 @@ export default class Plannotator extends View {
   // name that carries the file's hash so nothing stale can ever be shown from it.
   async pull(a) {
     const name = `${a.id}-${String(a.sent_sha256 ?? "").slice(0, 8)}.${extOf(a.name)}`;
-    const abs = `${ATT()}/${name}`;
+    const abs = `${this.cacheDir()}/${name}`;
     // `image()` resolves a path against the app's own folder — `appHome()` is that folder —
     // and draws nothing at all for a path outside it, so the picture is handed the short
     // form of the same file.
@@ -831,7 +850,7 @@ export default class Plannotator extends View {
   // copy, and the app-relative name `image()` is handed. A path that is not a file — gone,
   // or something the panel cannot read — throws, and the message keeps its count.
   async have(abs) {
-    const r = await exec("sh", ["-c", COPY, "plannotator", abs, ATT()]);
+    const r = await exec("sh", ["-c", COPY, "plannotator", abs, this.cacheDir()]);
     let out;
     try {
       out = JSON.parse(String(r.stdout ?? "").trim() || "{}");
@@ -895,6 +914,23 @@ export default class Plannotator extends View {
       }
       cx.notify();
     });
+  }
+
+  // Where this thread's files are copied to: one folder per thread, so leaving the thread
+  // can take every copy of it with it and nothing else.
+  cacheDir() {
+    const id = String(this.opened?.id ?? "thread");
+    return `${ATT()}/${/^msg_[A-Za-z0-9]+$/.test(id) ? id : "thread"}`;
+  }
+
+  // The copies of a thread's files, deleted when the person leaves it: they are a cache for
+  // what the panel is drawing, and the Inbox still has every one of them.
+  prune(id) {
+    const thread = String(id ?? "");
+    if (!/^msg_[A-Za-z0-9]+$/.test(thread)) return;
+    exec("sh", ["-c", PRUNE, "plannotator", thread, ATT()]).catch(() => {});
+    for (const key of [...this.files.keys()]) this.files.delete(key);
+    this.shots.clear();
   }
 
   // A file an agent sent, opened in the panel: read-only, on a page of its own, with the
@@ -2005,19 +2041,22 @@ export default class Plannotator extends View {
   // A picture an agent wrote into its message: drawn at the panel's width — `image()`
   // keeps the file's own shape when only its width is given — and a click opens the
   // thread in the Inbox, where the browser can show it the size it was taken.
-  // A picture an agent wrote into its message: a thumbnail at the panel's width, no taller
-  // than `PICTURE_CAP`, and a click that opens it at the size it was taken. A portrait
-  // screenshot — and agents take a lot of those — is a stamp here rather than a column of
-  // screen it never earned.
+  // A picture an agent wrote into its message: a thumbnail centred in the column, no
+  // taller than `PICTURE_CAP`, and a click that opens it at the size it was taken. A
+  // portrait screenshot — and agents take a lot of those — is a stamp here rather than a
+  // column of screen it never earned. The click is on the box around the picture, not on
+  // the picture: a native image element takes styles but does not itself take a press.
   renderInline(m, p) {
-    return v_flex().id(`pl-in-${m?.id}-${p.i}`).flex_none().items_start()
-      .child(image(p.file.rel).w(this.pictureWidth(p.file, PICTURE_CAP)).rounded(6).cursor_pointer()
+    const px = this.pictureWidth(p.file, PICTURE_CAP);
+    return v_flex().id(`pl-in-${m?.id}-${p.i}`).w_full().flex_none().items_center()
+      .child(h_flex().id(`pl-in-b-${m?.id}-${p.i}`).flex_none().rounded(6).cursor_pointer()
         .on_click(() => this.openPicture({
           rel: p.file.rel,
           name: p.alt,
           width: p.file.width,
           height: p.file.height,
-        })));
+        }))
+        .child(image(p.file.rel).w(px).rounded(6)));
   }
 
   // One file an agent attached: the glyph its kind wears, its name, its size, and a click
@@ -2092,10 +2131,11 @@ export default class Plannotator extends View {
         return v_flex().id("pl-view-pic").flex_1().min_h(0).w_full().overflow_y_scrollbar().p(10)
           .items_center().gap(8)
           .when(Boolean(v.file), (el) => el
-            .child(image(v.file.rel).w(this.pictureWidth(a, null)).rounded(6).cursor_pointer()
+            .child(h_flex().id("pl-view-pic-b").flex_none().rounded(6).cursor_pointer()
               .on_click(() => this.openPicture({
                 rel: v.file.rel, name: a.name, width: a.width, height: a.height,
-              })))
+              }))
+              .child(image(v.file.rel).w(this.pictureWidth(a, null)).rounded(6)))
             .child(row("Open full size in the browser", `/api/inbox/attachments/${a.id}/image`,
               `${OWN}/image.svg`)));
       }
