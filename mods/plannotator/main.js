@@ -967,7 +967,7 @@ export default class Plannotator extends View {
   aimDown(key, e, target, block) {
     const at = e?.local_position ?? { x: 0, y: 0 };
     this.pressed = {
-      key, target, block,
+      key, target, block, when: Date.now(),
       x: Number(e?.position?.x) || 0, y: Number(e?.position?.y) || 0,
       at: { x: Number(at.x) || 0, y: Number(at.y) || 0 },
     };
@@ -979,6 +979,10 @@ export default class Plannotator extends View {
   // the page: a drag that ran upwards anchors at the end it started from, not at the pointer
   // it began under. The two ends are the press and the release, and the window positions say
   // which is higher, which is all a stack of paragraphs needs.
+  //
+  // A release can land on no paragraph at all — the air between two of them, the card around
+  // them — which is why the panel's root calls this too, with no block for the end: nothing to
+  // anchor to, so the bar is drawn at the end the drag started from, which is in a paragraph.
   aimUp(key, e, target, block, cx) {
     const down = this.pressed;
     this.pressed = null;
@@ -990,9 +994,9 @@ export default class Plannotator extends View {
     // way to leave one.
     if (this.commenting) return;
     // Up and to the left is earlier in the page; anything else keeps the press as the end.
-    const earlier = y < down.y - 0.5 || (Math.abs(y - down.y) <= 0.5 && x < down.x);
+    const earlier = Boolean(key) && (y < down.y - 0.5 || (Math.abs(y - down.y) <= 0.5 && x < down.x));
     const end = earlier
-      ? { key, target, block, at: e?.local_position } 
+      ? { key, target, block, at: e?.local_position }
       : { key: down.key, target: down.target, block: down.block, at: down.at };
     this.aiming = {
       key: end.key, target: end.target, block: end.block,
@@ -1004,8 +1008,11 @@ export default class Plannotator extends View {
   // A press that is not the bar's own is a press somewhere else, and a highlight it does
   // not make puts the offer away: the bar goes as the selection does. The bar and the
   // field stop the press before it gets here (`stop_propagation`), so neither closes
-  // itself by being clicked.
+  // itself by being clicked. A press with no block under it — the air between two
+  // paragraphs — also ends whatever drag was being read, or the next release in a paragraph
+  // would be measured against a press from another gesture.
   aimAway(cx) {
+    if (this.pressed && Date.now() - this.pressed.when > 32) this.pressed = null;
     if (!this.aiming) return;
     this.aiming = null;
     cx?.notify();
@@ -1763,8 +1770,12 @@ export default class Plannotator extends View {
     return v_flex().id("root").size_full().min_h(0).overflow_hidden()
       .rounded(10).bg(t.background).border_1().border_color(t.border)
       // A press anywhere that is not the comment bar puts the offer away: the bar belongs to
-      // a highlight, and a click somewhere else is what clears one.
+      // a highlight, and a click somewhere else is what clears one. The release is read here
+      // as well, so a drag that ends on the air between two paragraphs still offers a
+      // comment — a block's own handler gets there first and empties `pressed`, which leaves
+      // this one with nothing to do.
       .on_mouse_down("left", (_e, cx) => this.aimAway(cx))
+      .on_mouse_up("left", (e, cx) => this.aimUp(null, e, null, null, cx))
       // How wide the column is, which is what a picture is drawn to fit: a render that
       // wants it only reads it, so this reports and does not notify.
       .on_size_change((size) => { this.size = size; })

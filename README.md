@@ -168,8 +168,8 @@ is cleared when the panel starts.
 A comment needs no page. Drag across a paragraph of an agent's message and
 a **Comment** bar appears over the highlight's first line, at the end of the
 drag that comes first in the page — so dragging upwards opens it at the top
-too (under the line if that is the paragraph's first); the bar becomes a
-field under
+too (under the line if that is the paragraph's first), and a drag that ends
+in the gap below the paragraph still counts; the bar becomes a field under
 that paragraph — the highlighted line quoted above it, your words in it,
 and Cancel and Comment buttons. Click anywhere else and the bar goes, the
 way the highlight does. What it is filed against is the paragraph, so the
