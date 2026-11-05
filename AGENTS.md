@@ -23,8 +23,9 @@ the code.
   its log), `ANNOUNCE` (decisions to Herdr toasts).
 - `mods/plannotator/mod.json` — the tab manifest `tab-host` reads; see the
   README's table.
-- `mods/plannotator/icon.svg`, `image.svg`, `video.svg`, `code.svg` — the
-  button's glyph and the ones a message's attached files wear, all
+- `mods/plannotator/icon.svg`, `image.svg`, `video.svg`, `code.svg`,
+  `trash.svg`, `thumbs-up.svg` — the button's glyph, the ones a message's
+  attached files wear, and the two a comment's quick fill wears, all
   `currentColor` strokes so the theme tints them.
 - `keys.json` — the six `global` bindings this mod expects, merged into
   the person's `keys.json`, never replacing theirs.

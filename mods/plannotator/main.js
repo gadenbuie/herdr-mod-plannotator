@@ -1169,12 +1169,21 @@ export default class Plannotator extends View {
   renderNoteField() {
     const t = theme(), c = this.commenting;
     if (!c?.field) return null;
+    // Two comments most of the work a highlight does, and they are only words to start from:
+    // the field is filled, the caret goes in, and the person says the rest (or presses
+    // Comment) themselves.
+    const quick = (icon, tip, words) => div().id(`pl-note-${icon}`).size(22).flex_none().flex()
+      .items_center().justify_center().rounded(5).hover((s) => s.bg(t.hover)).cursor_pointer()
+      .tooltip(tip).on_click((_e, cx) => this.prefill(words, cx))
+      .child(svg(`${OWN}/${icon}.svg`).size(12).flex_none().text_color(t.muted));
     return v_flex().id("pl-note-box").w_full().flex_none().mt(3).mb(2).gap(5).p(7).rounded(7)
       .bg(t.popover).border_1().border_color(t.accent)
       .on_mouse_down("left", (_e, cx) => cx.stop_propagation())
       .when(Boolean(c.quote), (el) => el.child(div().truncate().text_size(10.5).text_color(t.dim).child(c.quote)))
       .child(div().w_full().child(Textarea.new(c.field)))
-      .child(h_flex().gap(6).items_center()
+      .child(h_flex().gap(4).items_center()
+        .child(quick("trash", "Please delete this", "Please delete this"))
+        .child(quick("thumbs-up", "Looks good", "👍 Looks good"))
         .child(div().flex_1())
         .child(h_flex().id("pl-note-cancel").h(22).flex_none().px(9).items_center().rounded(5)
           .hover((s) => s.bg(t.hover))
@@ -1185,6 +1194,16 @@ export default class Plannotator extends View {
           .hover((s) => s.bg(t.accent).text_color(t.accent_foreground))
           .on_click((_e, cx) => this.saveNote(cx))
           .child(div().text_size(11.5).child("Comment"))));
+  }
+
+  // A quick comment is a prefill, nothing more: the words land in the field with the caret
+  // after them, and Comment still sends them.
+  prefill(text, cx) {
+    const c = this.commenting;
+    if (!c?.field) return;
+    c.field.set_value(text);
+    c.field.focus();
+    cx?.notify();
   }
 
   // A staged comment in the reply band: what it is about, then the words, then the one thing

@@ -89,11 +89,13 @@ the tree — sticks to its space and comes back with it.
   in: the bar is drawn at the press when the drag ran down into the air, and
   in the panel's own box, at the point the highlight reached, when the drag
   ran up into it (a release event's `bounds` are the box the handler is on,
-  so the panel's own box turns a window position into a panel position). The bar becomes a field under that paragraph (the quote it
-  stands for above it, the words in it, Cancel and Comment), and Comment
-  files it in the band below, keeping the paragraph for the person to go on
-  reading. A click anywhere else is a highlight put away, and the bar goes
-  with it.
+  so the panel's own box turns a window position into a panel position). The
+  bar becomes a field under that paragraph: the quote it stands for above
+  it, the words in it, a bin and a thumbs up that only fill the field in
+  ("Please delete this", "👍 Looks good"), then Cancel and Comment — and
+  Comment files it in the band below, keeping the paragraph for the person
+  to go on reading. A click anywhere else is a highlight put away, and the
+  bar goes with it.
 - **The palette** (520×340 at the pointer): a search line over six rows —
   Annotate the last message, Review my changes, Annotate all files,
   Annotate another folder…, Open the Inbox, Open Plannotator as a tab —
