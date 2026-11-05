@@ -79,10 +79,13 @@ the tree — sticks to its space and comes back with it.
   browser, and a web page is its source plus a row to the Inbox, which
   renders it; both say so.
 - **A comment, made**: a drag across a paragraph puts a "Comment" bar where
-  the pointer let go; the bar becomes a field under that paragraph — the
-  quote it stands for above it, the words in it, a Comment button and "Esc
-  puts it away" — and Comment files it in the band below, keeping the
-  paragraph for the person to go on reading.
+  the pointer let go — and a drag that starts in one paragraph and ends in
+  the next puts it at the start of the drag, on the paragraph it started
+  in — the bar becomes a field under that paragraph (the quote it stands
+  for above it, the words in it, Cancel and Comment), and Comment files it
+  in the band below, keeping the paragraph for the person to go on
+  reading. A click anywhere else is a highlight put away, and the bar goes
+  with it.
 - **The palette** (520×340 at the pointer): a search line over six rows —
   Annotate the last message, Review my changes, Annotate all files,
   Annotate another folder…, Open the Inbox, Open Plannotator as a tab —
@@ -396,7 +399,17 @@ the tree — sticks to its space and comes back with it.
   selectable for the person and reports nothing back; `on_mouse_down` and
   `on_mouse_up` on a `TextView` report a position, which is all the
   comment's anchor is — the block, and the pointer's place on it. Do not
-  build anything that needs the highlighted characters themselves.
+  build anything that needs the highlighted characters themselves. A drag
+  that leaves its block is still a comment on the block it started in, and
+  a press in a different block is another comment: the press and the
+  release are two events on two elements, and the press is the one that
+  names the anchor.
+- **A bar that outlived its highlight is a bug the person reports.** The
+  panel is never told the selection went away, so the offer is taken away
+  by the first press that is not the bar's own: a press handler on the
+  panel's root, with `stop_propagation` on the bar and on the comment
+  field so neither closes itself by being clicked (the same shape the
+  folder's pen uses).
 
 ## Done when
 

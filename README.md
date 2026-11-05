@@ -168,9 +168,11 @@ is cleared when the panel starts.
 A comment needs no page. Drag across a paragraph of an agent's message and
 a **Comment** bar appears where you let go; the bar becomes a field under
 that paragraph — the highlighted line quoted above it, your words in it,
-and a Comment button. What it is filed against is the paragraph, so the
+and Cancel and Comment buttons. Click anywhere else and the bar goes, the
+way the highlight does. What it is filed against is the paragraph, so the
 quote is its first line: the panel cannot read your selection, and does not
-need to. A code file, which has no paragraphs to press, gets one row instead
+need to — a highlight that starts in one paragraph and runs into the next
+is a comment on the one it started in. A code file, which has no paragraphs to press, gets one row instead
 — **Comment on this file**, above the code view — and a markdown file takes
 a comment paragraph by paragraph, as a message does.
 

@@ -957,26 +957,47 @@ export default class Plannotator extends View {
 
   // ---- a comment on the words ----
 
-  // A press inside a block, waiting for the release that tells a highlight from a click:
-  // the same block, and the pointer moved. Anything else is not a comment and opens
-  // nothing — a click to hand the panel the keyboard, a drag that ends in another block.
-  aimDown(key, e) {
-    this.pressed = { key, x: Number(e?.position?.x) || 0, y: Number(e?.position?.y) || 0 };
-    if (this.aiming && this.aiming.key !== key) this.aiming = null;
+  // A press inside a block: where it landed, on what. A drag is read at the release, in
+  // `aimUp` — a click to hand the panel the keyboard, or to put a highlight away, opens
+  // nothing.
+  aimDown(key, e, target, block) {
+    const at = e?.local_position ?? { x: 0, y: 0 };
+    this.pressed = {
+      key, target, block,
+      x: Number(e?.position?.x) || 0, y: Number(e?.position?.y) || 0,
+      at: { x: Number(at.x) || 0, y: Number(at.y) || 0 },
+    };
   }
 
-  aimUp(key, e, target, block, cx) {
+  // The bar, from the drag that ended here. A highlight can start in one paragraph and run
+  // into the next, and the panel cannot see it at all (`blocksOf` says why) — so the comment
+  // goes on the paragraph the drag started in, and the bar is drawn there, at the point the
+  // selection began. Same paragraph: the bar appears where the pointer let go.
+  aimUp(key, e, cx) {
     const down = this.pressed;
     this.pressed = null;
-    if (!down || down.key !== key) return;
+    if (!down) return;
     const moved = Math.hypot((Number(e?.position?.x) || 0) - down.x, (Number(e?.position?.y) || 0) - down.y);
     if (moved < 4) return;
     // One comment at a time: a drag in another block while a field is open and being
     // typed in would throw those words away to offer a second bar, and Esc is already the
     // way to leave one.
     if (this.commenting) return;
-    const at = e?.local_position ?? { x: 6, y: 6 };
-    this.aiming = { key, at: { x: Number(at.x) || 0, y: Number(at.y) || 0 }, target, block };
+    const at = down.key === key ? (e?.local_position ?? down.at) : down.at;
+    this.aiming = {
+      key: down.key, target: down.target, block: down.block,
+      at: { x: Number(at?.x) || 0, y: Number(at?.y) || 0 },
+    };
+    cx?.notify();
+  }
+
+  // A press that is not the bar's own is a press somewhere else, and a highlight it does
+  // not make puts the offer away: the bar goes as the selection does. The bar and the
+  // field stop the press before it gets here (`stop_propagation`), so neither closes
+  // itself by being clicked.
+  aimAway(cx) {
+    if (!this.aiming) return;
+    this.aiming = null;
     cx?.notify();
   }
 
@@ -1067,11 +1088,11 @@ export default class Plannotator extends View {
     // takes for its own selection still reaches the element that owns it, and `aimUp` is
     // idempotent because both of them are asked.
     return v_flex().id(`pl-blk-${key}`).w_full().flex_none().relative()
-      .on_mouse_down("left", (e) => this.aimDown(key, e))
-      .on_mouse_up("left", (e, cx) => this.aimUp(key, e, target, block, cx))
+      .on_mouse_down("left", (e) => this.aimDown(key, e, target, block))
+      .on_mouse_up("left", (e, cx) => this.aimUp(key, e, cx))
       .child(TextView.markdown(`pl-md-${key}`, block).selectable()
-        .on_mouse_down("left", (e) => this.aimDown(key, e))
-        .on_mouse_up("left", (e, cx) => this.aimUp(key, e, target, block, cx)))
+        .on_mouse_down("left", (e) => this.aimDown(key, e, target, block))
+        .on_mouse_up("left", (e, cx) => this.aimUp(key, e, cx)))
       .when(Boolean(bar), (el) => el.child(bar))
       .when(Boolean(box), (el) => el.child(box));
   }
@@ -1105,7 +1126,11 @@ export default class Plannotator extends View {
       .when(Boolean(c.quote), (el) => el.child(div().truncate().text_size(10.5).text_color(t.dim).child(c.quote)))
       .child(div().w_full().child(Textarea.new(c.field)))
       .child(h_flex().gap(6).items_center()
-        .child(div().flex_1().text_size(10.5).text_color(t.dim).child("Esc puts it away"))
+        .child(div().flex_1())
+        .child(h_flex().id("pl-note-cancel").h(22).flex_none().px(9).items_center().rounded(5)
+          .hover((s) => s.bg(t.hover))
+          .on_click((_e, cx) => this.closeComment(cx))
+          .child(div().text_size(11.5).text_color(t.muted).child("Cancel")))
         .child(h_flex().id("pl-note-ok").h(22).flex_none().px(9).items_center().rounded(5)
           .bg(t.solid).text_color(t.solid_foreground)
           .hover((s) => s.bg(t.accent).text_color(t.accent_foreground))
@@ -1715,6 +1740,9 @@ export default class Plannotator extends View {
     // border, the theme's background.
     return v_flex().id("root").size_full().min_h(0).overflow_hidden()
       .rounded(10).bg(t.background).border_1().border_color(t.border)
+      // A press anywhere that is not the comment bar puts the offer away: the bar belongs to
+      // a highlight, and a click somewhere else is what clears one.
+      .on_mouse_down("left", (_e, cx) => this.aimAway(cx))
       // How wide the column is, which is what a picture is drawn to fit: a render that
       // wants it only reads it, so this reports and does not notify.
       .on_size_change((size) => { this.size = size; })
