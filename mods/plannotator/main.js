@@ -440,13 +440,60 @@ function lastAgentOf(messages) {
 // either side of it are drawn as the markdown they are. Its alt text goes with it — the
 // Inbox names those files (`pasted-image-2026-11-03-1452`), so a sentence with two
 // pictures in it would carry two filenames through the middle of it.
+// The same text with its code blanked to spaces, so a match's place in it is its place in
+// the message: a fenced block (``` or ~~~, closed by the same fence or running to the end)
+// and an inline `span`, one line at a time, a run of backticks closing at the next run of as
+// many. Blanked rather than cut, because everything found here is quoted back out of the
+// message as it was written.
+function codeSpans(text) {
+  const chars = [...text];
+  const blank = (from, to) => {
+    for (let i = from; i < to; i += 1) if (chars[i] !== "\n") chars[i] = " ";
+  };
+  const lines = [];
+  let at = 0;
+  for (const line of text.split("\n")) {
+    lines.push({ line, at });
+    at += line.length + 1;
+  }
+  let fence = null;
+  let opened = 0;
+  for (const { line, at: start } of lines) {
+    const mark = /^\s{0,3}(`{3,}|~{3,})/.exec(line);
+    if (fence) {
+      if (mark && mark[1][0] === fence[0] && mark[1].length >= fence.length) {
+        blank(opened, start + line.length);
+        fence = null;
+      }
+    } else if (mark) {
+      fence = mark[1];
+      opened = start;
+    }
+  }
+  if (fence) blank(opened, text.length);
+  for (const { line, at: start } of lines) {
+    const runs = /`+/g;
+    let m;
+    while ((m = runs.exec(line))) {
+      const close = line.indexOf(m[0], m.index + m[0].length);
+      if (close < 0) continue;
+      blank(start + m.index, start + close + m[0].length);
+      runs.lastIndex = close + m[0].length;
+    }
+  }
+  return chars.join("");
+}
+
 function wordsOf(body) {
   const text = String(body ?? "").replace(/^:::[a-z-]*[^\n]*$/gm, "");
+  // What is code is not a picture: `![alt](path)` written as an example is the words the
+  // agent is showing, and a message that talks about pictures must not draw one.
+  const plain = codeSpans(text);
   const parts = [];
   let pictures = 0;
   let at = 0;
   const re = /!\[([^\]]*)\]\(([^)\s]*)\)/g;
-  for (let m = re.exec(text); m; m = re.exec(text)) {
+  for (let m = re.exec(plain); m; m = re.exec(plain)) {
     const words = text.slice(at, m.index).replace(/\n{3,}/g, "\n\n").trim();
     if (words) parts.push({ type: "text", text: words });
     at = m.index + m[0].length;

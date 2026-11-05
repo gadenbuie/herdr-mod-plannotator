@@ -254,7 +254,13 @@ the tree — sticks to its space and comes back with it.
   again — so a copy older than its source is replaced (`[ "$src" -nt
   "$dest" ]`). A path that is gone stays a count under the words, and the
   count goes to the Inbox's own page, which has the picture if anything
-  does. The click is on a box around the picture, not on the picture: an
+  does. What is code is not a picture: `![alt](path)` in a backtick span or
+  in a fenced block is the words an agent is talking about, so `codeSpans`
+  blanks those before the search and a message about pictures draws none —
+  a quote of the markdown read as one, and said "1 picture could not be
+  read here" under a message holding no picture at all. The blanking is per
+  line for a span, so a span broken across a line break still reads as a
+  picture. The click is on a box around the picture, not on the picture: an
   `image()` takes styles, but a press lands on a `div()` or an `h_flex()`.
 - **The rest of an answer is a page away.** "Open in Inbox for picks and
   pictures" (and the header's page button) opens the Inbox at

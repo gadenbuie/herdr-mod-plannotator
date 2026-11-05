@@ -159,6 +159,9 @@ into its words — no file the Inbox has — is commented on as the message that
 wrote it, quoted with the `![…](…)` it wrote. The panel copies those files
 itself, so it shows the picture as the agent left it; when the path is not a
 file any more, a count takes its place under the words and leads to the Inbox.
+Markdown in backticks or in a fenced block is quoted, not drawn: an agent
+writing `![alt](path)` as an example gets the example, not a picture it never
+meant.
 
 Two kinds the panel cannot show, and does not pretend to: a video opens in
 the browser where the Inbox's own player has it, and a web page shows its

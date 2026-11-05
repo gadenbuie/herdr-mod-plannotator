@@ -99,6 +99,9 @@ read it before changing anything here. The short list:
   `shared.json` is ignored rather than adopted.
 - Two shown copies both receive a key: the 500 ms `claimed` guard makes
   one press one run.
+- A message's words are the agent's markdown, code and all: `![alt](path)`
+  written as an example is not a picture, which is why `wordsOf` searches
+  `codeSpans`' blanked copy rather than the message.
 
 ## The voice
 
