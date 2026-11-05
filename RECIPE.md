@@ -50,11 +50,14 @@ the tree — sticks to its space and comes back with it.
   field grows 2→8 rows, Send goes live for words or a picked answer, and
   the line under it says what the Send carries: "1 answer goes with this
   reply"), and last an "Open in Inbox for picks and pictures" row. Pictures
-  written into the words are counted as a link; the files an agent attached
-  are the message's own: a picture drawn under the words with its name and
-  size beneath it, and every other file a row — its kind's glyph, its name,
-  its size. A click on either opens the file. A refused send says why in
-  the Inbox's own sentence.
+  written into the words are drawn under them at the panel's width, one after
+  another, in the order the agent wrote them, and a click opens the thread in
+  the Inbox where the browser can show them taken size; the files an agent
+  attached are the message's own: a picture drawn under the words with its
+  name and size beneath it, and every other file a row — its kind's glyph, its
+  name, its size. A click on either opens the file. A picture whose path is
+  not a file any more is counted instead, and the count leads to the Inbox.
+  A refused send says why in the Inbox's own sentence.
 - **A file, opened**, is a page of its own under the thread: the header is
   the back chevron and the file's name, a `dim` row under it says what kind
   of file it is, how big, and for a picture or a film its size in pixels and
@@ -144,6 +147,16 @@ the tree — sticks to its space and comes back with it.
   so a message can draw them; every other kind is read only when the person
   opens it. The files are read-only in both directions: the panel shows them
   and sends nothing about them.
+- **A picture written into the words is a path, not an attachment.** The
+  agents write `![alt](/abs/a.png)`, or a name relative to the project the
+  thread is about, so the panel copies the file itself into the same folder
+  (`<cksum of the path>.<ext>`) and drops it into the markdown: `TextView`
+  cannot load an image, and the words lose the picture they were written
+  around. That copy can go stale where an attachment's cannot — the path is
+  a file the agent may write again — so a copy older than its source is
+  replaced (`[ "$src" -nt "$dest" ]`). A path that is gone stays a count
+  under the words, and the count goes to the Inbox's own page, which has the
+  picture if anything does.
 - **The rest of an answer is a page away.** "Open in Inbox for picks and
   pictures" (and the header's page button) opens the Inbox at
   `#thread=<id>` through `plannotator inbox --background`, which prints the
@@ -225,15 +238,17 @@ the tree — sticks to its space and comes back with it.
   person's `keys.json`, never replacing it. The `cmd-alt-i` binding is
   `tab-host.toggle:plannotator` — that mod's command, spelled `tab-host`,
   not `tabhost`.
-- Six `sh -c` scripts, because a mod has no directory or HTTP API of its
+- Seven `sh -c` scripts, because a mod has no directory or HTTP API of its
   own: `ASK` (the Inbox over its loopback server — `curl -s -m 5` to a
   route under `/api/inbox/`, the port read from `inbox.json`, a canned
   error JSON when the server is down), `OPEN` (the Inbox in the browser:
   a `#thread=<id>` route, or a `/api/inbox/…` resource opened as it is),
   `PULL` (one attachment's bytes to a file, `?version=sent`, skipped when
-  the file is already there), `LIST` (one tree level, NUL-separated, `.git`
-  skipped, 200 entries at most), `RUN` (a background session and its log),
-  `ANNOUNCE` (finished sessions, `__told`-marked, printed once).
+  the file is already there), `COPY` (a picture out of the person's own
+  files, under a name made from its path, replaced when the source is
+  newer), `LIST` (one tree level, NUL-separated, `.git` skipped, 200
+  entries at most), `RUN` (a background session and its log), `ANNOUNCE`
+  (finished sessions, `__told`-marked, printed once).
 - `herdr` functions: `spaces`, `focused`, `panes`, `exec`, `run`, `theme`,
   `props`, `openOverlay`, `closeOverlay`, `notify`, `watchFolder`,
   `pickFolder`, `home`, `appHome`, `nextCommand`, `keys`, `shared`,
@@ -343,6 +358,10 @@ the tree — sticks to its space and comes back with it.
   line numbers, a picture at the panel's width, a video and a web page by
   their browser rows. Esc and the back chevron return to the thread, and a
   file the Inbox no longer has says so and offers the thread.
+- A picture an agent wrote into its words is drawn under them at the
+  panel's width, in the order it was written, and a click opens the thread
+  in the Inbox; a path that is gone leaves the count, and the count opens
+  the same page.
 - Sessions start in the background (no tab, a log per run) and a decision
   becomes one Herdr toast within the second, panel hidden, `__told`
   keeping it single.

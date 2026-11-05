@@ -15,11 +15,12 @@ the code.
 
 - `mods/plannotator/main.js` — the whole mod, one `View`: the panel (no
   props), the palette (`props().mode === "palette"`), a tree row's menu
-  (`"menu"`). Six `sh -c` scripts live in it: `ASK` (the Inbox over its
+  (`"menu"`). Seven `sh -c` scripts live in it: `ASK` (the Inbox over its
   loopback server), `OPEN` (the Inbox in the browser, by hash route or by
   resource), `PULL` (one attachment's bytes into the app's folder),
-  `LIST` (one level of a folder), `RUN` (a background session and its
-  log), `ANNOUNCE` (decisions to Herdr toasts).
+  `COPY` (an inline picture out of the person's files into the same
+  folder), `LIST` (one level of a folder), `RUN` (a background session and
+  its log), `ANNOUNCE` (decisions to Herdr toasts).
 - `mods/plannotator/mod.json` — the tab manifest `tab-host` reads; see the
   README's table.
 - `mods/plannotator/icon.svg`, `image.svg`, `video.svg`, `code.svg` — the

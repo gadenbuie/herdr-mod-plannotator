@@ -95,6 +95,28 @@ rm -f "$3"
 [ -n "$msg" ] || msg="The Inbox did not hand over this file"
 printf '{"error":"%s"}' "$(printf '%s' "$msg" | tr -d '"')"
 `;
+// A picture an agent wrote into its message, copied where the panel can draw it: `$1` is
+// the path the agent named, `$2` the folder to copy it into, and the name it lands under
+// is made from that path. Unlike an attachment this copy can go stale — the path is a
+// file the agent may write again — so a copy older than its source is replaced, and the
+// page prints the path it wrote for the caller to hand to `image()`.
+const COPY = `
+src="$1"
+dir="$2"
+[ -f "$src" ] || { printf '{"error":"missing"}'; exit 0; }
+[ -r "$src" ] || { printf '{"error":"unreadable"}'; exit 0; }
+ext=bin
+case "$src" in
+  *.*) leaf="\${src##*/}"; ext="\${leaf##*.}" ;;
+esac
+key=$(printf '%s' "$src" | cksum | cut -d' ' -f1)
+dest="$dir/$key.$ext"
+if [ ! -f "$dest" ] || [ "$src" -nt "$dest" ]; then
+  mkdir -p "$dir" 2>/dev/null
+  cp "$src" "$dest" 2>/dev/null || { printf '{"error":"copy"}'; exit 0; }
+fi
+printf '{"ok":1,"file":"%s"}' "$dest"
+`;
 // The Inbox in the person's browser, on one page of it: `$1` is the page's own hash
 // route — `thread=<id>`, or empty for the list — or, when it starts with `/`, one of
 // the Inbox's own resources (the video an agent attached, say) to open as it is.
@@ -367,25 +389,42 @@ function lastAgentOf(messages) {
   return null;
 }
 
-// A message's words, as the panel can draw them, and how many pictures it had.
+// A message's words, as the panel can draw them, and the pictures it wrote into them.
 //
 // The agents write in markdown, and `TextView` renders it — lists, tables and code
 // included — so only the two things it cannot do come off. `:::question` and
 // `:::action` are the Inbox's own block fences: the picks under them need the page,
 // but the words are the agent's, and the `- [ ]` choices and `Recommended:` line read
 // as what was asked. A picture is a path in the person's own files
-// (`![alt](/abs/a.png)`), which a mod cannot draw: it comes off the words and is
-// counted, and the link under the message says where the pictures are. Its alt text
-// goes with it — the Inbox names those files (`pasted-image-2026-11-03-1452`), so a
-// sentence with two pictures in it would carry two filenames through the middle of it.
+// (`![alt](/abs/a.png)`, or one relative to the project), which `TextView` cannot load:
+// it comes off the words and is drawn under them instead, pulled off the disk the way
+// an attachment is. Its alt text goes with it — the Inbox names those files
+// (`pasted-image-2026-11-03-1452`), so a sentence with two pictures in it would carry
+// two filenames through the middle of it.
 function wordsOf(body) {
-  const pictures = (String(body ?? "").match(/!\[[^\]]*\]\([^)]*\)/g) ?? []).length;
+  const pictures = [];
   const text = String(body ?? "")
     .replace(/^:::[a-z-]*[^\n]*$/gm, "")
-    .replace(/!\[[^\]]*\]\([^)]*\)/g, "")
+    .replace(/!\[([^\]]*)\]\(([^)\s]*)\)/g, (_all, alt, url) => {
+      if (url) pictures.push({ alt: String(alt ?? "").trim(), url });
+      return "";
+    })
     .replace(/\n{3,}/g, "\n\n")
     .trim();
   return { text, pictures };
+}
+
+// Where an inline picture is on disk: the path the agent wrote, absolute or relative to
+// the project the thread is about, and nothing at all for a `data:` or an `http(s)` URL —
+// those are not files the panel can hand to `image()`.
+function pictureAt(url, root) {
+  const u = String(url ?? "").trim();
+  if (!u) return null;
+  if (/^file:\/\//i.test(u)) return decodeURI(u.slice(7));
+  if (/^[a-z][a-z0-9+.-]*:/i.test(u)) return null;
+  if (u.startsWith("/")) return u;
+  const dir = String(root ?? "").replace(/\/+$/, "");
+  return dir ? `${dir}/${u.replace(/^\.\//, "")}` : null;
 }
 
 // A message's question blocks, taken out of its words: each one is drawn as a card from
@@ -459,6 +498,10 @@ export default class Plannotator extends View {
     this.files = new Map();
     // The ones being read now, so a second read of the same thread asks once.
     this.readingFiles = new Set();
+    // The pictures written into messages, by the path the agent named: copied where
+    // `image()` can draw them, or `{error: true}` when the path is not a file any more.
+    this.shots = new Map();
+    this.readingShots = new Set();
     // The panel's own width, from `on_size_change`: a picture is drawn no wider than the
     // column it sits in, and `image()` fills whatever box it is given.
     this.size = null;
@@ -764,11 +807,29 @@ export default class Plannotator extends View {
     return { abs, rel };
   }
 
-  // The pictures a thread carries, read once each so its messages can draw them. One
-  // that cannot be read keeps its row, which is the way into the Inbox's own copy of it:
-  // a file that cannot be handed over is not a broken thread.
+  // A picture written into a message, copied into the same folder: its own path, its own
+  // copy, and the app-relative name `image()` is handed. A path that is not a file — gone,
+  // or something the panel cannot read — throws, and the message keeps its count.
+  async have(abs) {
+    const r = await exec("sh", ["-c", COPY, "plannotator", abs, ATT()]);
+    let out;
+    try {
+      out = JSON.parse(String(r.stdout ?? "").trim() || "{}");
+    } catch {
+      out = {};
+    }
+    if (!out?.ok || !out?.file) throw new Error(String(out?.error ?? "copy"));
+    const dest = String(out.file);
+    return { abs: dest, rel: dest.slice(appHome().length + 1) };
+  }
+
+  // The pictures a thread carries, read once each so its messages can draw them: the files
+  // attached to a message, and the pictures written into its words. One that cannot be
+  // read keeps its row, which is the way into the Inbox's own copy of it: a file that
+  // cannot be handed over is not a broken thread.
   loadPictures(cx) {
-    const want = [];
+    const want = [], shots = [];
+    const root = this.opened?.thread?.project?.root;
     for (const m of this.opened?.thread?.messages ?? []) {
       for (const a of m?.attachments ?? []) {
         if (a?.kind !== "image" || !a.id) continue;
@@ -776,8 +837,14 @@ export default class Plannotator extends View {
         this.readingFiles.add(a.id);
         want.push(a);
       }
+      for (const p of wordsOf(m?.body).pictures) {
+        const abs = pictureAt(p.url, root);
+        if (!abs || this.shots.has(abs) || this.readingShots.has(abs)) continue;
+        this.readingShots.add(abs);
+        shots.push(abs);
+      }
     }
-    if (want.length === 0) return;
+    if (want.length === 0 && shots.length === 0) return;
     cx.spawn(async (cx) => {
       for (const a of want) {
         try {
@@ -786,6 +853,16 @@ export default class Plannotator extends View {
           // The row stays, and says why when the person opens it.
         } finally {
           this.readingFiles.delete(a.id);
+        }
+      }
+      for (const abs of shots) {
+        try {
+          this.shots.set(abs, await this.have(abs));
+        } catch {
+          // The message keeps its count, which leads to the thread on the Inbox page.
+          this.shots.set(abs, { error: true });
+        } finally {
+          this.readingShots.delete(abs);
         }
       }
       cx.notify();
@@ -1801,6 +1878,13 @@ export default class Plannotator extends View {
     const t = theme(), mine = m?.author?.kind === "person";
     const asked = Array.isArray(m?.questions) ? m.questions : [];
     const { text, pictures } = wordsOf(asked.length ? wordsWithoutQuestions(m?.body) : m?.body);
+    // The pictures in the words, each one drawn where it was written when its file could be
+    // copied; the rest are counted, and the count leads to the Inbox's own page.
+    const root = this.opened?.thread?.project?.root;
+    const drawn = pictures
+      .map((p, i) => ({ ...p, i, file: this.shots.get(pictureAt(p.url, root)) }))
+      .filter((p) => p.file?.rel);
+    const missed = pictures.length - drawn.length;
     const at = Date.parse(m?.created_at);
     // The files the agent sent with its words: a picture is drawn where it can be seen,
     // everything else is a row. An attachment is often the thing the message is about, so
@@ -1828,24 +1912,39 @@ export default class Plannotator extends View {
       .when(Boolean(text) || asked.length === 0, (el) => el
         .child(div().w_full().text_size(14).line_height(1.6)
           .child(TextView.markdown(`pl-md-${m?.id}`, text || "_(no words)_"))))
+      // A picture belongs to the words it was written under, so it is drawn there — above
+      // the question cards, which are the last thing the agent said — and the files the
+      // message came with follow both.
+      .when(drawn.length > 0, (el) => el.child(v_flex().w_full().flex_none().gap(6).pt(2)
+        .children(drawn.map((p) => this.renderInline(m, p)))))
       .children(asked.map((q) => this.renderQuestion(m, q))))
       .when(atts.length > 0, (el) => el.child(v_flex().w_full().flex_none().gap(4).pt(2)
         .when(pics.length > 0, (s) => s.child(h_flex().gap(6).flex_wrap().items_start()
           .children(pics.map((a) => this.renderPicture(a)))))
         .when(files.length > 0, (s) => s.child(h_flex().gap(4).flex_wrap()
           .children(files.map((a) => this.renderChip(a)))))))
-      // A message with pictures in it says so, and says it as a link: it goes where the
-      // pictures are — the page on this thread — in `accent` with the same `file-text` the
+      // A picture that could not be drawn says so, and says it as a link: it goes where the
+      // picture is — the page on this thread — in `accent` with the same `file-text` the
       // row at the bottom of the page wears, so "this opens the Inbox" reads the same in
-      // both places. A mod cannot draw an image off the person's disk, so the count is
-      // what it can offer besides the way there.
-      .when(pictures > 0, (el) => el.child(h_flex().id(`pl-pics-${m?.id}`).h(18).flex_none()
+      // both places.
+      .when(missed > 0, (el) => el.child(h_flex().id(`pl-pics-${m?.id}`).h(18).flex_none()
         .gap(5).items_center().rounded(4).cursor_pointer()
         .hover((s) => s.bg(t.hover))
         .on_click(() => this.respond())
         .child(svg(`${ICONS}/file-text.svg`).size(11).flex_none().text_color(t.accent))
         .child(div().text_size(11).text_color(t.accent)
-          .child(pictures === 1 ? "1 picture — open it in the Inbox" : `${pictures} pictures — open them in the Inbox`))));
+          .child(missed === 1
+            ? "1 picture could not be read here — open the thread in the Inbox"
+            : `${missed} pictures could not be read here — open the thread in the Inbox`))));
+  }
+
+  // A picture an agent wrote into its message: drawn at the panel's width — `image()`
+  // keeps the file's own shape when only its width is given — and a click opens the
+  // thread in the Inbox, where the browser can show it the size it was taken.
+  renderInline(m, p) {
+    return v_flex().id(`pl-in-${m?.id}-${p.i}`).w_full().flex_none().items_start()
+      .child(image(p.file.rel).w(this.pictureWidth({}, null)).rounded(6).cursor_pointer()
+        .on_click(() => this.respond()));
   }
 
   // One file an agent attached: the glyph its kind wears, its name, its size, and a click

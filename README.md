@@ -139,15 +139,23 @@ text the same way, a picture at the panel's width. Nothing there edits,
 downloads or uploads, and the back chevron (or Esc) returns to the thread
 it came in.
 
+Pictures an agent writes *into* its words — `![alt](/tmp/shot.png)`, the
+path it just took — are drawn under them too, one after another in the
+order they were written, and a click opens the thread in the Inbox where
+the browser shows them at full size. The panel copies those files itself,
+so it shows the picture as the agent left it; when the path is not a file
+any more, a count takes its place under the words and leads to the Inbox.
+
 Two kinds the panel cannot show, and does not pretend to: a video opens in
 the browser where the Inbox's own player has it, and a web page shows its
 source with a row to the Inbox, which renders it.
 
-The bytes come from the Inbox, not from the path the agent named — that
-file is usually gone by the time you read the thread, and the Inbox kept
-what it sent. They are cached in
+The attachment bytes come from the Inbox, not from the path the agent
+named — that file is usually gone by the time you read the thread, and the
+Inbox kept what it sent. They are cached in
 `~/.config/herdr-app/data/plannotator/att/`, one file per attachment named
-by its hash. Nothing prunes them.
+by its hash; a picture written into the words lands in the same folder,
+named by its path. Nothing prunes them.
 
 ## Plannotator
 
