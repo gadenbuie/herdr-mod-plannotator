@@ -91,9 +91,9 @@ the tree — sticks to its space and comes back with it.
   ran up into it (a release event's `bounds` are the box the handler is on,
   so the panel's own box turns a window position into a panel position). The
   bar itself is three targets in one surface — "Comment", a bin and a thumbs
-  up — and the last two are shortcuts into the same field with their words
-  already in it ("Please delete this", "👍 Looks good"); nothing is filed
-  until Comment. The bar becomes a field under that paragraph: the quote it
+  up — and the last two skip the field and stage the comment the field would
+  have made ("Please delete this", "👍 Looks good"), which is the one-click
+  path: the row lands in the band, and its ✕ is the way to take it back. The bar becomes a field under that paragraph: the quote it
   stands for above it, the words in it, Cancel and Comment, and Comment
   files it in the band below, keeping the paragraph for the person to go on
   reading. A click anywhere else is a highlight put away, and the bar goes

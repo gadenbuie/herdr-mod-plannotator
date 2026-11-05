@@ -1041,18 +1041,17 @@ export default class Plannotator extends View {
     cx?.notify();
   }
 
-  // The bar, become the field. A quick one arrives with its words already in it — the person
-  // adjusts them or presses Comment, and nothing is filed until they do.
-  openComment(cx, words = "") {
+  // The bar, become the field.
+  openComment(cx) {
     const a = this.aiming;
     if (!a) return;
     this.aiming = null;
-    this.openCommentOn(a.key, a.target, a.block, cx, words);
+    this.openCommentOn(a.key, a.target, a.block, cx);
   }
 
   // The field for a comment on one block — or on a whole file, which has no block to press
   // in: the code view is the `Editor`'s, and the row under the facts is its way in.
-  openCommentOn(key, target, block, cx, words = "") {
+  openCommentOn(key, target, block, cx) {
     this.closeComment(cx);
     const field = TextareaState.new({ placeholder: "What about it?" });
     field.set_auto_grow(3, 6);
@@ -1063,12 +1062,10 @@ export default class Plannotator extends View {
     this.pressed = null;
     cx?.notify();
     // The caret goes in once the frame that draws the field is there: a field made and
-    // focused in the same call has nowhere to put one yet, and the words a quick button
-    // brought land with it.
+    // focused in the same call has nowhere to put one yet.
     cx?.spawn(async (cx) => {
       await cx.sleep(30);
       if (this.commenting?.field !== field) return;
-      if (words) field.set_value(words);
       field.focus();
       cx.notify();
     });
@@ -1092,7 +1089,16 @@ export default class Plannotator extends View {
     const text = String(c.field?.value() ?? "").trim();
     this.closeComment(cx);
     if (!text) return;
-    const note = { id: noteId(), target: c.target, quote: c.quote, text, serverId: null, error: null };
+    this.addNote(c.target, c.quote, text, cx);
+  }
+
+  // One comment staged: in the band over the reply field, and saved to the Inbox at once —
+  // the draft its own page keeps, so the browser counts it and the agent reads it with the
+  // reply. A save that does not land costs nothing: the words go out in the reply's own
+  // `feedback` either way, and the row says the Inbox did not keep it.
+  addNote(target, quote, text, cx) {
+    if (!text) return;
+    const note = { id: noteId(), target, quote, text, serverId: null, error: null };
     // Whose comment this is comes from the thread on screen, not from whichever path opened
     // it: a thread restored from the carried state (`syncState`) never runs `openThread`.
     this.notedFor = this.opened?.id ?? null;
@@ -1107,6 +1113,15 @@ export default class Plannotator extends View {
       }
       cx.notify();
     });
+  }
+
+  // A shortcut on the bar is the comment the field would have made, made: same quote, same
+  // words, no field. It lands in the band, where the ✕ is the way back.
+  noteNow(words, cx) {
+    const a = this.aiming;
+    if (!a) return;
+    this.aiming = null;
+    this.addNote(a.target, quoteOf(a.block), words, cx);
   }
 
   // A staged comment put away: the Inbox's draft goes with it, so the page and the panel go
@@ -1176,14 +1191,14 @@ export default class Plannotator extends View {
         .child(svg(`${ICONS}/plus.svg`).size(11).flex_none().text_color(t.accent))
         .child(div().flex_none().text_size(11.5).text_color(t.foreground).child("Comment")))
       .child(div().flex_1())
-      .child(part("pl-note-trash", (_e, cx) => this.openComment(cx, "Please delete this"))
+      .child(part("pl-note-trash", (_e, cx) => this.noteNow("Please delete this", cx))
         .tooltip("Please delete this")
         .child(svg(`${OWN}/trash.svg`).size(12).flex_none().text_color(t.muted)))
       // Square on the right, where it meets the border, and narrower on that side than the
       // others: its box is the bar's edge.
       .child(h_flex().id("pl-note-thumbs-up").h(20).flex_none().pl(6).pr(5).items_center()
         .hover((s) => s.bg(t.hover)).cursor_pointer().tooltip("👍 Looks good")
-        .on_click((_e, cx) => this.openComment(cx, "👍 Looks good"))
+        .on_click((_e, cx) => this.noteNow("👍 Looks good", cx))
         .child(svg(`${OWN}/thumbs-up.svg`).size(12).flex_none().text_color(t.muted)));
   }
 

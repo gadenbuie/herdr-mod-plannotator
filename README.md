@@ -173,10 +173,11 @@ the air around a paragraph still counts — the comment is on the paragraph it
 started in, and the bar appears where the highlight first reached, above the
 paragraph if that is the end you dragged to. The bar becomes a field under
 that paragraph — the highlighted line quoted above it, your words in it,
-and Cancel and Comment buttons. The bar carries two shortcuts into that
-same field: a bin ("Please delete this") and a thumbs up ("👍 Looks good"),
-which open it with those words already there for you to adjust or send.
-Click anywhere else and the bar goes, the way the highlight does. What it is filed against is the paragraph, so the
+and Cancel and Comment buttons. The bar also carries two shortcuts that skip
+the field entirely — a bin ("Please delete this") and a thumbs up ("👍 Looks
+good") — and stage that comment straight away, as if you had typed it and
+pressed Comment; the ✕ on the row it adds is how you take it back. Click
+anywhere else and the bar goes, the way the highlight does. What it is filed against is the paragraph, so the
 quote is its first line: the panel cannot read your selection, and does not
 need to — a highlight that starts in one paragraph and runs into the next
 is a comment on the one it started in. A code file, which has no paragraphs to press, gets one row instead
