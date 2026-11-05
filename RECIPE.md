@@ -395,7 +395,9 @@ the tree — sticks to its space and comes back with it.
   alpha in another, so `bg(t.popover)` plus `.hover(s => s.bg(t.hover))` is a
   bar that goes see-through under the pointer in the person's graphite theme.
   A row with no background of its own takes the tint; anything already filled
-  hovers by `opacity(0.88)` (the app's confirm buttons) or by its border.
+  needs a state of its own — and the comment bar has none: it appears under
+  the pointer that was just dragging, so a change on the way in is a flicker,
+  and the pointer is the cursor's job.
 - **An `absolute()` element that hugs its text draws nothing.** The
   Comment bar came out as empty space until it was given `.w(112)`: a
   positioned box with no width resolves to zero, and nothing in the app

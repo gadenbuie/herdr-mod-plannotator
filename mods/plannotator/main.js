@@ -1110,11 +1110,9 @@ export default class Plannotator extends View {
     const top = y >= 28 ? y - 28 : y + 6;
     return h_flex().id("pl-note-bar").absolute().left(left).top(top).w(112).h(24).px(8).gap(6)
       .items_center().rounded(6).bg(t.popover).border_1().border_color(t.border)
-      // Hover dims it rather than filling it: `hover` is the page's own tint, and on a
-      // surface that has a background of its own — this one, on `popover` — a tint over a
-      // fill is a translucent bar, transparent in a theme that tints with alpha. The confirm
-      // dialog's buttons dim the same way.
-      .hover((s) => s.opacity(0.88)).cursor_pointer()
+      // No hover state: it is a bar that appears under the pointer that was just dragging, so
+      // the pointer is already on it, and anything it does on the way in reads as a flicker.
+      .cursor_pointer()
       .on_mouse_down("left", (_e, cx) => cx.stop_propagation())
       .on_click((_e, cx) => this.openComment(cx))
       .child(svg(`${ICONS}/plus.svg`).size(11).flex_none().text_color(t.accent))
