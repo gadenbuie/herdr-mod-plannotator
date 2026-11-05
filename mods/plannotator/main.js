@@ -856,7 +856,11 @@ export default class Plannotator extends View {
         // The person may have gone back, or into another thread, while this was out:
         // then the field on screen is that thread's and the words in it are not these.
         if (this.opened?.id !== id) return;
-        if (this.notedFor === id) this.notes = [];
+        // The Send carried them, so the band is empty again — unconditionally: a thread the
+        // panel restored rather than opened never set `notedFor`, and a row left behind here
+        // is a comment that was sent, still sitting over the reply field.
+        this.notes = [];
+        this.inboxComments = 0;
         this.draft.set_value("");
         this.reply = { busy: false, error: null };
         this.loadThread(cx);
@@ -1045,6 +1049,9 @@ export default class Plannotator extends View {
     this.closeComment(cx);
     if (!text) return;
     const note = { id: noteId(), target: c.target, quote: c.quote, text, serverId: null, error: null };
+    // Whose comment this is comes from the thread on screen, not from whichever path opened
+    // it: a thread restored from the carried state (`syncState`) never runs `openThread`.
+    this.notedFor = this.opened?.id ?? null;
     this.notes.push(note);
     cx?.notify();
     cx?.spawn(async (cx) => {

@@ -412,6 +412,13 @@ the tree — sticks to its space and comes back with it.
   a press in a different block is another comment: the press and the
   release are two events on two elements, and the press is the one that
   names the anchor.
+- **A thread can arrive without `openThread`.** `syncState` restores the
+  thread a space had open — after a reload, or a switch between spaces — and
+  reads it from there, so nothing `openThread` sets up is set. Attribute what
+  the person makes to the thread on screen at that moment (`this.opened.id`),
+  and clear it on the thread that sends it, not against a flag that only the
+  opening path writes: the comments of a restored thread were sent and went on
+  sitting over the reply field.
 - **A bar that outlived its highlight is a bug the person reports.** The
   panel is never told the selection went away, so the offer is taken away
   by the first press that is not the bar's own: a press handler on the
