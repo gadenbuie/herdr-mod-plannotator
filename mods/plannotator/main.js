@@ -340,24 +340,15 @@ function readable(kind) {
   return kind === "markdown" || kind === "text" || kind === "code" || kind === "html";
 }
 
-// Whether a text file is shown as a document rather than in the code view: the
-// attachments agents send are mostly markdown, code and patches, and those read better as
-// the viewer draws them — a document as markdown, code and a patch inside one fenced
-// block. Anything else is a text file the code view lists best.
+// Whether a text file is drawn as a markdown document rather than in the code view: a
+// markdown file is the one kind the viewer renders — headings, links, its own code blocks
+// — and everything else that is code or a patch reads better with line numbers and a
+// scroll of its own, so it goes to the code view.
 function asDocument(a) {
   // A file too big to lay out as one block is listed with line numbers instead: the viewer
   // would have to draw every line of it before the person could scroll.
   if ((Number(a?.size) || 0) > 500000) return false;
-  if (a?.kind === "markdown" || a?.kind === "code") return true;
-  return /^(?:diff|patch|md|markdown)$/.test(extOf(a?.name));
-}
-
-// A file's words as one fenced block, with a fence longer than the longest run of
-// backticks inside it, so code that quotes code still comes out as one block.
-function fenced(text, language) {
-  const longest = (String(text).match(/`+/g) ?? []).reduce((n, s) => Math.max(n, s.length), 0);
-  const fence = "`".repeat(Math.max(3, longest + 1));
-  return `${fence}${language ?? ""}\n${String(text).replace(/\n$/, "")}\n${fence}`;
+  return a?.kind === "markdown" || /^(?:md|markdown)$/.test(extOf(a?.name));
 }
 
 // The newest `seq` a thread's messages carry: the cursor both the seen request and a
@@ -825,13 +816,15 @@ export default class Plannotator extends View {
           if (this.viewing !== v) return;
           // The code view's state is made here, in the task that read the file: made in a
           // render it would throw, and one rebuilt per frame would lose the scroll. Only
-          // the files the viewer does not draw need it.
+          // the files the viewer does not draw as markdown need it. Lines wrap: the
+          // panel is 368 px wide, and a sideways scroll on every other line is worse than
+          // a wrapped one, with the numbers still one per line.
           if (!asDocument(a)) {
             v.editor = EditorState.new({
               language: languageOf(a.name) ?? undefined,
               value: v.text,
               readonly: true,
-              soft_wrap: false,
+              soft_wrap: true,
             });
           }
         }
@@ -1932,29 +1925,24 @@ export default class Plannotator extends View {
             .child(row("Open full size in the browser", `/api/inbox/attachments/${a.id}/image`,
               `${OWN}/image.svg`)));
       }
-      if (a.kind === "markdown") {
-        return v_flex().id("pl-view-doc").flex_1().min_h(0).w_full().overflow_y_scrollbar().px(14).py(10)
-          .child(v_flex().w_full().text_size(13.5).line_height(1.6)
-            .child(TextView.markdown(`pl-att-${a.id}`, v.text || "_(no words)_")));
+      // Code, a patch and every other text file is listed by the code view, which scrolls
+      // itself, keeps its line numbers and knows the file's language by its name. A web
+      // page is only ever its source here: the Inbox renders the page itself, and a row
+      // goes there.
+      if (!asDocument(a)) {
+        return v_flex().id("pl-view-code").flex_1().min_h(0).w_full()
+          .when(a.kind === "html", (el) => el
+            .child(div().flex_none().px(14).pt(6).text_size(11).text_color(t.dim)
+              .child("A web page reads as its source here; the Inbox shows it as a page."))
+            .child(v_flex().px(6).pt(2).items_start().child(inThread())))
+          .when(Boolean(v.editor), (el) => el.child(v_flex().flex_1().min_h(0).w_full().px(6).py(4)
+            .child(Editor.new(v.editor))));
       }
-      // Code, a patch, and any other text the viewer shows: one fenced block — the same
-      // markdown the thread draws, so a file reads like the messages around it, with no
-      // editor's chrome over a thing the person cannot edit here.
-      if (asDocument(a) || !v.editor) {
-        return v_flex().id("pl-view-doc").flex_1().min_h(0).w_full().overflow_y_scrollbar().px(14).py(10)
-          .child(v_flex().w_full().text_size(13).line_height(1.5)
-            .child(TextView.markdown(`pl-att-src-${a.id}`, fenced(v.text, languageOf(a.name)))));
-      }
-      // Everything else that is words — a page's source, a log, a csv — is listed by the
-      // code view, which scrolls itself and keeps its line numbers. A web page is only ever
-      // its source here: the Inbox renders the page itself, and a row goes there.
-      return v_flex().id("pl-view-code").flex_1().min_h(0).w_full()
-        .when(a.kind === "html", (el) => el
-          .child(div().flex_none().px(14).pt(6).text_size(11).text_color(t.dim)
-            .child("A web page reads as its source here; the Inbox shows it as a page."))
-          .child(v_flex().px(6).pt(2).items_start().child(inThread())))
-        .when(Boolean(v.editor), (el) => el.child(v_flex().flex_1().min_h(0).w_full().px(6).py(4)
-          .child(Editor.new(v.editor))));
+      // Markdown, the one kind the viewer draws: the person's own document, read as the
+      // thread's messages are.
+      return v_flex().id("pl-view-doc").flex_1().min_h(0).w_full().overflow_y_scrollbar().px(14).py(10)
+        .child(v_flex().w_full().text_size(13.5).line_height(1.6)
+          .child(TextView.markdown(`pl-att-${a.id}`, v.text || "_(no words)_")));
     };
     return v_flex().id("pl-view").flex_1().min_h(0).w_full().max_w(760)
       .child(h_flex().id("pl-view-facts").h(24).flex_none().px(14).gap(6).items_center()

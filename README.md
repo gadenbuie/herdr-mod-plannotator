@@ -133,10 +133,11 @@ A message that came with files shows them. A picture is drawn under the
 words at the size it was taken, with its name and size beneath it; every
 other file is a row — its kind's glyph, its name, its size — and so is a
 picture once it is clicked. Clicking either opens the file in the panel,
-read-only: a document as the markdown it is, code and a patch inside a code
-block, any other text with line numbers, a picture at the panel's width.
-Nothing there edits, downloads or uploads, and the back chevron (or Esc)
-returns to the thread it came in.
+read-only: a markdown document as the markdown it is, code and a patch in
+the code view — line numbers, its language, a scroll of its own — any other
+text the same way, a picture at the panel's width. Nothing there edits,
+downloads or uploads, and the back chevron (or Esc) returns to the thread
+it came in.
 
 Two kinds the panel cannot show, and does not pretend to: a video opens in
 the browser where the Inbox's own player has it, and a web page shows its

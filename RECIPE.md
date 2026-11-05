@@ -58,11 +58,13 @@ the tree — sticks to its space and comes back with it.
 - **A file, opened**, is a page of its own under the thread: the header is
   the back chevron and the file's name, a `dim` row under it says what kind
   of file it is, how big, and for a picture or a film its size in pixels and
-  length, and the body is the file — a document as the markdown it is, code
-  and a patch inside one code block, any other text with line numbers, a
-  picture at the panel's width. Read-only: nothing here edits, downloads or
-  uploads. A video is a row that plays it in the browser, and a web page is
-  its source plus a row to the Inbox, which renders it; both say so.
+  length, and the body is the file — a markdown document as the markdown it
+  is, and code, a patch and every other text file in the code view: line
+  numbers, its language by extension, and a scroll of its own rather than
+  the panel's. A picture is drawn at the panel's width. Read-only: nothing
+  here edits, downloads or uploads. A video is a row that plays it in the
+  browser, and a web page is its source plus a row to the Inbox, which
+  renders it; both say so.
 - **The palette** (520×340 at the pointer): a search line over six rows —
   Annotate the last message, Review my changes, Annotate all files,
   Annotate another folder…, Open the Inbox, Open Plannotator as a tab —
@@ -238,10 +240,9 @@ the tree — sticks to its space and comes back with it.
   `setShared`, `readTextFile`. Programs: the `plannotator` CLI (`last`,
   `review`, `annotate <path>`, `inbox --background`), `curl`,
   `open`/`xdg-open`, `sh`. Elements: `svg`, `image` (a file the mod copied
-  into the app's folder), `TextView.markdown` (a document, and code and a
-  patch as one fenced block), and `Editor` with a readonly `EditorState`
-  for text a fence would mangle. Icons are the shipped `workspace-chrome`
-  set plus this mod's own.
+  into the app's folder), `TextView.markdown` (a markdown attachment), and
+  `Editor` with a readonly `EditorState` for the code view. Icons are the
+  shipped `workspace-chrome` set plus this mod's own.
 - The loopback routes are internal — the same requests the Inbox page
   itself opens with, needing no token, but a new Inbox version can change
   a payload. The parsers throw on a shape they don't know, which turns
@@ -338,7 +339,7 @@ the tree — sticks to its space and comes back with it.
   moved it.
 - A message with files shows them: a picture drawn under its words with
   its name and size, every other file a row with its kind's glyph. A click
-  opens the file: a document as markdown, code as a code block, a log with
+  opens the file: markdown as a document, code, a patch and a log with
   line numbers, a picture at the panel's width, a video and a web page by
   their browser rows. Esc and the back chevron return to the thread, and a
   file the Inbox no longer has says so and offers the thread.
