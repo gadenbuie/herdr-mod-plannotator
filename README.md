@@ -9,7 +9,8 @@ A **Plannotator** button shows how many threads are waiting on you while
 the panel is closed; clicking it opens the Inbox's threads in the side
 panel, each with a dot for what it needs — yellow asks something, blue is
 new since you looked, grey is read. Read any thread as markdown right
-there, answer its questions by clicking their choices, reply in words
+there, answer its questions by clicking their choices, mark the todo tasks
+an agent left (Done, Can't do it, a note), reply in words
 without leaving the terminal — and read the files the agent attached to it:
 a picture drawn where it was sent, a document, a code file or a patch one
 click from its own read-only page. When a decision is made in a Plannotator
@@ -206,8 +207,9 @@ wrote into its words, quoted with the markdown it wrote.
 
 Comment moves the words into the reply band at the bottom of the thread,
 with the line they are about and a ✕ to drop them, and saves them to the
-Inbox at once; the band counts them ("1 answer and 1 comment go with this
-reply"). Send carries them with the reply: the agent reads your words,
+Inbox at once; the band counts them ("1 answer, 1 task and 1 comment go
+with this reply"). Send carries them with the reply: the agent reads your
+words,
 then **Comment on your message:** — or, for a file, **Comment on `spec.md`
 lines 3-5:** — the quoted line, and the comment. Esc puts an open field away, and a click is only a click —
 the bar wants a drag.
@@ -221,6 +223,6 @@ panel has anything to say. Its [Inbox](https://plannotator.ai/inbox/) is
 the async surface where long-running agents leave questions, summaries and
 reviews for the person; this mod reads that Inbox over its loopback server,
 and every answer picked in the panel is the same draft the Inbox page
-keeps. This panel is a thin native window onto all of that — the decisions
+keeps, every task marked there too. This panel is a thin native window onto all of that — the decisions
 and the answers stay Plannotator's, and the pages it links to are
 Plannotator's own.

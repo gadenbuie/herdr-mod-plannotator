@@ -437,9 +437,11 @@ function lastAgentOf(messages) {
 //
 // The agents write in markdown, and `TextView` renders it — lists, tables and code
 // included — so only the two things it cannot do come off. `:::question` and
-// `:::action` are the Inbox's own block fences: the picks under them need the page,
-// but the words are the agent's, and the `- [ ]` choices and `Recommended:` line read
-// as what was asked. A picture is a path in the person's own files
+// `:::action` are the Inbox's own block fences: both are drawn as cards from the
+// `questions` the Inbox parsed beside the body, and the caller takes the whole fences
+// out first (`wordsWithoutQuestions`); what is left here carries only the fence lines
+// themselves, for a body whose records did not come with it. A picture is a path in the
+// person's own files
 // (`![alt](/abs/a.png)`, or one relative to the project), which `TextView` cannot load:
 // it is drawn where it stands instead, as a thumbnail the click opens, and the words on
 // either side of it are drawn as the markdown they are. Its alt text goes with it — the
@@ -551,13 +553,15 @@ function pictureAt(url, root) {
   return dir ? `${dir}/${u.replace(/^\.\//, "")}` : null;
 }
 
-// A message's question blocks, taken out of its words: each one is drawn as a card from
-// the `questions` the Inbox parsed beside the body, so the same words twice would be one
-// too many. Every question fence comes off — `:::question`, `:::question-multi` and
-// `:::question-text` — an `:::action` block has no card here, and its
-// words are still the only place the person can read it.
+// A message's question and action blocks, taken out of its words: each one is drawn as a
+// card from the `questions` the Inbox parsed beside the body, so the same words twice
+// would be one too many. Every fence comes off whole — `:::question`, `:::question-multi`,
+// `:::question-text` and `:::action` — the card is the only place the person reads them.
 function wordsWithoutQuestions(body) {
-  return String(body ?? "").replace(/^:::question(?:-multi|-text)?\n[\s\S]*?^:::$/gm, "").replace(/\n{3,}/g, "\n\n").trim();
+  return String(body ?? "")
+    .replace(/^:::question(?:-multi|-text)?\n[\s\S]*?^:::$/gm, "")
+    .replace(/^:::action\n[\s\S]*?^:::$/gm, "")
+    .replace(/\n{3,}/g, "\n\n").trim();
 }
 
 // A message's, or a document's, words cut into the blocks a comment can be put on: a
@@ -923,11 +927,12 @@ export default class Plannotator extends View {
   // the words, and the thread is read again to show what moved it.
   send(cx) {
     const o = this.opened, words = String(this.draft?.value() ?? "").trim();
-    // Words are not the only thing a Send can carry: the answers picked in the cards, and the
-    // comments made on the words of the page, go with them — and either of those alone is a
-    // reply the Inbox takes on its own.
+    // Words are not the only thing a Send can carry: the answers picked in the cards, the
+    // actions marked in them, and the comments made on the words of the page, go with them
+    // — and any of those alone is a reply the Inbox takes on its own.
     const notes = this.notes.filter((n) => n.text);
-    if (!o?.thread || (!words && this.unsentPicks(o.thread).length === 0 && notes.length === 0) || this.reply?.busy) return;
+    if (!o?.thread || (!words && this.unsentPicks(o.thread).length === 0
+      && this.unsentActions(o.thread).length === 0 && notes.length === 0) || this.reply?.busy) return;
     const target = lastAgentOf(o.thread.messages);
     if (!target) {
       this.reply = { busy: false, error: "This thread has no agent message to answer." };
@@ -948,6 +953,7 @@ export default class Plannotator extends View {
         // refused as unsent. The send waits for the last save to settle first.
         if (this.pending) await this.pending.catch(() => {});
         const picks = this.unsentPicks(this.opened?.thread);
+        const acts = this.unsentActions(this.opened?.thread);
         // The comments go the way the Inbox's own page sends them: rendered in `feedback`,
         // which the Inbox puts after the person's words in the message the agent reads, and
         // named as `annotation_ids`, which is what settles the drafts it is holding.
@@ -956,6 +962,9 @@ export default class Plannotator extends View {
           // Every answer this thread has made and not sent, named the way the page names
           // them: `{message_id, key, revision}`, with the answer already saved in the Inbox.
           questions: picks,
+          // The actions marked here, named the way the page names them: the results
+          // themselves are already saved, the Send only carries them to the agent.
+          ...(acts.length > 0 ? { actions: acts } : {}),
           ...(notes.length > 0 ? { feedback: feedbackOf(notes) } : {}),
           ...(notes.some((n) => n.serverId) ? { annotation_ids: notes.map((n) => n.serverId).filter(Boolean) } : {}),
           idempotency_key: `panel-${id}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`,
@@ -2159,6 +2168,12 @@ export default class Plannotator extends View {
           if (this.fields.has(this.fieldId(msg, q, slot))) continue;
           this.answerField(msg, q, slot, cx);
         }
+        // An action's words live on its result, not on an answer: a note the person left
+        // when they marked it opens in the field, the way a saved answer does.
+        if (q?.kind === "action" && String(q?.action_result?.note ?? "").trim()
+          && !this.fields.has(this.fieldId(msg, q, "note"))) {
+          this.answerField(msg, q, "note", cx);
+        }
       }
     }
   }
@@ -2172,13 +2187,17 @@ export default class Plannotator extends View {
     // Re-seeded when the record moves on, but never under the person's hands: text they have
     // typed and not yet saved is theirs, not stale.
     if (!p || (p.revision !== rev && !p.dirty)) {
-      const a = q?.answer ?? {};
+      // An action's record is its result, not an answer: the outcome the marks hold and
+      // the note that went with it. The rest of the slots stay empty — an action takes
+      // no own option and no written answer.
+      const a = q?.kind === "action" ? (q?.action_result ?? {}) : (q?.answer ?? {});
       p = {
         revision: rev,
         selected: [...(a.selected ?? [])],
         other: String(a.other ?? ""),
         note: String(a.note ?? ""),
         text: String(a.text ?? ""),
+        outcome: q?.kind === "action" ? (a.outcome ?? null) : null,
         dirty: false,
       };
       this.picked.set(id, p);
@@ -2285,9 +2304,17 @@ export default class Plannotator extends View {
         return data;
       });
     });
+    this.watch(id, m, work, cx);
+  }
+
+  // What both saves share once the request is out: one at a time per card (`saving`, the
+  // chain `savePick` and `saveAction` join), a Send that waits on it, and the refusal —
+  // the Inbox's own sentence, under the card it belongs to. A thread the person has left
+  // takes no refusal, and one that moved is read again, so the card draws what it says.
+  watch(id, m, work, cx) {
     this.saving.set(id, work);
-    // A Send waits on this: the reply names picks, and a pick still in flight is one the
-    // Inbox would refuse as unsent.
+    // A Send waits on this: the reply names picks and marked actions, and one still in
+    // flight would be refused as unsent.
     this.pending = work.catch(() => {});
     this.cardError = null;
     cx?.spawn(async (cx) => {
@@ -2305,6 +2332,44 @@ export default class Plannotator extends View {
         this.loadThread(cx);
       }
     });
+  }
+
+  // An action marked, taken back or noted, saved where the page saves it: the browser
+  // posts the outcome to `messages/<id>/actions/<key>`, staged so it goes with the next
+  // reply, and the reply's Send names it (`unsentActions`). The Inbox takes no note
+  // without an outcome — a note on an unmarked action is a request it ignores — so a note
+  // typed while nothing is marked stays the draft the next mark carries; and a mark whose
+  // outcome has not moved sends only the note (`note_only`), so it does not re-mark.
+  saveAction(m, q, cx) {
+    const id = `${m?.id}/${q?.key}`;
+    const before = this.saving.get(id) ?? Promise.resolve();
+    const work = before.catch(() => {}).then(() => {
+      const p = this.pickedFor(m, q);
+      const current = this.recordOf(m, q) ?? q;
+      const had = current?.action_result ?? null;
+      const note = String(p.note ?? "").trim();
+      // Taking back a mark the Inbox does not hold would be that same ignored request:
+      // there is nothing to undo, so nothing goes out and the draft stays as it is.
+      if (p.outcome === null && !had) return {};
+      const body = p.outcome === null
+        ? { outcome: null }
+        : { outcome: p.outcome,
+            ...(note ? { note } : {}),
+            ...(had && had.outcome === p.outcome ? { note_only: true } : {}),
+            staged: true };
+      return asked("POST", `messages/${m.id}/actions/${current.key}`, body).then((data) => {
+        // The questions as the Inbox now holds them — new revision, result written down —
+        // are the panel's copy, so a mark made here and one made in the browser are one.
+        const msg = this.opened?.thread?.messages?.find((x) => x?.id === m?.id);
+        if (msg && Array.isArray(data?.questions)) {
+          msg.questions = data.questions.filter((x) => x?.key);
+          const p2 = this.picked.get(id);
+          if (p2) p2.dirty = false;
+        }
+        return data;
+      });
+    });
+    this.watch(id, m, work, cx);
   }
 
   // A question's record as the panel holds it now: a save applies the Inbox's answer, so the
@@ -2349,7 +2414,8 @@ export default class Plannotator extends View {
     if (slot === "other" && value.trim() && q?.kind !== "multi") p.selected = [];
     if (slot === "text") p.selected = [];
     cx?.notify();
-    this.savePick(m, q, cx);
+    if (q?.kind === "action") this.saveAction(m, q, cx);
+    else this.savePick(m, q, cx);
   }
 
   // The picks this thread has made and not sent: what the reply's Send names. A question
@@ -2367,6 +2433,22 @@ export default class Plannotator extends View {
     return out;
   }
 
+  // The actions of this thread marked and not sent: what the reply's Send names, the way
+  // the page's own Send does — `{message_id, key}`, the result itself already saved by
+  // `saveAction`. A sent one (`sent_revision` caught up with `revision`) is not named
+  // again, and one taken back has no result to carry.
+  unsentActions(thread) {
+    const out = [];
+    for (const msg of thread?.messages ?? []) {
+      for (const q of msg?.questions ?? []) {
+        if (q?.kind !== "action" || !q?.action_result) continue;
+        if ((Number(q.sent_revision) || 0) >= (Number(q.revision) || 0)) continue;
+        out.push({ message_id: msg.id, key: q.key });
+      }
+    }
+    return out;
+  }
+
   // One question, as a card: its title in the header, what it is about under it, the
   // choices it offers, and the ways to answer it — a ring, a field for the person's own
   // option, a note on it, or the page for everything else. The title is the question's own
@@ -2376,6 +2458,12 @@ export default class Plannotator extends View {
   // A pick is the Inbox's to keep: a click saves it there (`savePick`), and the reply's
   // Send names it. So a card is answered but unsent until the Send at the bottom of the
   // page — "Picked, not sent" in `accent` — and settled once it has gone — "Answered".
+  //
+  // An action (`:::action`, the todo the agent left) is the same card with a different
+  // body: where it happens, the two marks — Done and Can't do it — and the note they
+  // carry, saved by `saveAction` and named by the Send like a pick is. Between the mark
+  // and the Send it is "· not sent", and still theirs to change or take back; once the
+  // Send has carried it the card reads the result back, and nothing on it is clickable.
   renderQuestion(m, q) {
     const t = theme();
     const sent = Boolean(q?.answer) && (Number(q?.sent_revision) || 0) === (Number(q?.revision) || 0);
@@ -2384,15 +2472,21 @@ export default class Plannotator extends View {
     const frozen = Boolean(q?.set_aside_at) || Boolean(q?.superseded_by) || sent;
     const picked = Boolean(q?.answer);
     const action = q?.kind === "action";
+    // An action's result is its answer: what was done, the note it carried, when. A marked
+    // action whose Send has carried it is settled — until then it is still theirs to change.
+    const result = action ? (q?.action_result ?? null) : null;
+    const settled = Boolean(result) && (Number(q?.sent_revision) || 0) >= (Number(q?.revision) || 0);
     const state = q?.set_aside_at ? "Set aside"
       : q?.superseded_by ? "Replaced"
+      : action
+        ? (result ? `${result.outcome === "done" ? "Done" : "Can't do it"}${settled ? "" : " · not sent"}` : "Waiting on you")
       : sent ? "Answered"
-      : action ? "Not answerable here"
       : picked ? "Picked, not sent"
       : "Waiting on you";
     const tone = q?.set_aside_at || q?.superseded_by ? t.dim
+      : action
+        ? (result ? (settled ? (result.outcome === "done" ? t.done : t.dim) : t.accent) : t.working)
       : sent ? t.done
-      : action ? t.dim
       : picked ? t.accent
       : t.working;
     const p = this.pickedFor(m, q);
@@ -2440,9 +2534,12 @@ export default class Plannotator extends View {
             .child(String(c.description)))));
     };
     // Their own option, when it is one they wrote: a ring and their words, marked as theirs.
-    const other = String(q?.answer?.other ?? "").trim();
-    const note = String(q?.answer?.note ?? "").trim();
+    // An action has none — its words are the note on the result.
+    const other = String(action ? "" : q?.answer?.other ?? "").trim();
+    const note = String((action ? result?.note : q?.answer?.note) ?? "").trim();
     const editable = !frozen && !action;
+    // An action the person can still act on: marked or not, until the Send carries it.
+    const openAction = action && !frozen && !settled;
     return v_flex().id(`pl-q-${m?.id}-${q?.key}`).w_full().flex_none().my(6).overflow_hidden()
       .rounded(8).border_1().border_color(t.border).bg(t.popover)
       .child(h_flex().flex_none().px(10).py(6).gap(7).items_center().border_b(1).border_color(t.border)
@@ -2468,18 +2565,46 @@ export default class Plannotator extends View {
         // A written question is answered in a field of its own: `text` is the answer, and a
         // note beside it is not the same thing.
         .when(editable && q?.kind === "text", (el) => el.child(this.fieldRow(m, q, "text", "Write your answer")))
-        .when(editable, (el) => el.child(this.fieldRow(m, q, "note", "Add a note")))
+        .when(editable || openAction, (el) => el.child(this.fieldRow(m, q, "note", "Add a note")))
+        // An action's own rows: where it happens — a link the click opens in the person's
+        // browser — the two marks, the way back off one, and what the agent is watching
+        // for. The marks are chips, the one the action already wears filled in; a mark
+        // saves at once (`saveAction`), like a ring does.
+        .when(action && Boolean(q?.action?.where_url), (el) => el.child(h_flex().id(`pl-qw-${m?.id}-${q?.key}`).h(20).flex_none()
+          .gap(5).items_center().rounded(4).cursor_pointer().hover((s) => s.bg(t.hover))
+          .on_click(() => this.openWhere(q.action.where_url))
+          .child(svg(`${ICONS}/chevron-right.svg`).size(11).flex_none().text_color(t.accent))
+          .child(div().flex_1().min_w(0).truncate().text_size(11).text_color(t.accent)
+            .child(String(q.action.where_url)))))
+        .when(openAction, (el) => el.child(h_flex().w_full().flex_none().gap(6)
+          .child(this.markButton(m, q, "done", "check", "Done"))
+          .child(this.markButton(m, q, "cant", "x", "Can't do it"))))
+        .when(openAction && Boolean(result), (el) => el.child(h_flex().id(`pl-qu-${m?.id}-${q?.key}`).h(20).flex_none()
+          .gap(5).items_center().rounded(4).cursor_pointer().hover((s) => s.bg(t.hover))
+          .on_click((_e, cx) => { const p = this.pickedFor(m, q); p.outcome = null; p.dirty = true; cx.notify(); this.saveAction(m, q, cx); })
+          .child(svg(`${ICONS}/trash.svg`).size(11).flex_none().text_color(t.dim))
+          .child(div().text_size(11).text_color(t.dim).child("Take back"))))
+        .when(action && Boolean(result), (el) => {
+          const at = Date.parse(result.at);
+          return el.child(div().text_size(10.5).text_color(t.dim)
+            .child(`Marked ${Number.isFinite(at) ? ago(at) : "just now"}`));
+        })
+        .when(action && Boolean(q?.action?.watching), (el) => el.child(div().text_size(11).text_color(t.dim)
+          .child(`Watching: ${q.action.watching}`)))
+        .when(action && Boolean(q?.stopped), (el) => el.child(div().text_size(11).text_color(t.dim)
+          .child(`Stopped: ${q.stopped}`)))
         // What the record holds, once nothing can be typed into it: their words back, and
         // the note they left on them.
         .when(!editable && Boolean(other), (el) => el.child(h_flex().w_full().flex_none().px(4).py(2)
           .gap(7).items_start().child(ring(true, false)).child(label(other, false))))
         .when(!editable && Boolean(q?.answer?.text), (el) => el.child(div().w_full().text_size(12).line_height(1.5)
           .child(TextView.markdown(`pl-qa-${m?.id}-${q?.key}`, String(q.answer.text)))))
-        .when(!(q?.choices ?? []).length && q?.kind === "action", (el) => el.child(div().text_size(11).text_color(t.dim)
-          .child("Something to do outside this thread")))
         .when(!(q?.choices ?? []).length && q?.kind !== "action" && !editable && !q?.answer?.text,
           (el) => el.child(div().text_size(11).text_color(t.dim).child("No answer")))
-        .when(Boolean(note), (el) => el.child(v_flex().w_full().flex_none().gap(2)
+        // What the record holds, once nothing can be typed into it: their words back, and
+        // the note they left on them. While a field is open the note lives in it, not here —
+        // drawing both would say it twice.
+        .when(!editable && !openAction && Boolean(note), (el) => el.child(v_flex().w_full().flex_none().gap(2)
           .child(div().text_size(10.5).text_color(t.dim).child("Note"))
           .child(div().text_size(12).text_color(t.muted).child(note))))
         // Only when it names no choice on the card: otherwise the tag above has said it.
@@ -2489,11 +2614,52 @@ export default class Plannotator extends View {
         // A refusal is the Inbox's own sentence, under the card it belongs to.
         .when(this.cardError?.id === `${m?.id}/${q?.key}`, (el) => el.child(div().text_size(11)
           .text_color(t.blocked).child(this.cardError.text)))
-        .when(!action, (el) => el.child(h_flex().id(`pl-qa-${m?.id}-${q?.key}`).h(20).flex_none().gap(5)
-          .items_center().rounded(4).cursor_pointer().hover((s) => s.bg(t.hover))
-          .on_click(() => this.respond())
-          .child(svg(`${ICONS}/square-pen.svg`).size(11).flex_none().text_color(t.accent))
-          .child(div().text_size(11).text_color(t.accent).child("Answer in the Inbox")))));
+        .when(!action, (el) => el.child(this.gotoInbox("Answer in the Inbox", `pl-qa-${m?.id}-${q?.key}`)))
+        .when(action, (el) => el.child(this.gotoInbox("Open in the Inbox", `pl-qa-${m?.id}-${q?.key}`))));
+  }
+
+  // The row that hands the rest to the page: an answer the panel cannot make (a picture,
+  // a pick on the page) or an action's own card, with its comment thread. One builder,
+  // two words — what it says is the only difference between the kinds.
+  gotoInbox(label, id) {
+    const t = theme();
+    return h_flex().id(id).h(20).flex_none().gap(5)
+      .items_center().rounded(4).cursor_pointer().hover((s) => s.bg(t.hover))
+      .on_click(() => this.respond())
+      .child(svg(`${ICONS}/square-pen.svg`).size(11).flex_none().text_color(t.accent))
+      .child(div().text_size(11).text_color(t.accent).child(label));
+  }
+
+  // One of an action's two marks, as a chip beside its twin: the one the action already
+  // wears is filled in, the other waits. A click is the pick and its save in one, the way
+  // a choice ring is — and clicking the worn one does nothing, so a double click is one
+  // save, not a mark and an undo.
+  markButton(m, q, outcome, icon, label) {
+    const t = theme(), on = this.pickedFor(m, q).outcome === outcome;
+    return h_flex().id(`pl-qd-${m?.id}-${q?.key}-${outcome}`).h(24).flex_none().px(9).gap(6).items_center()
+      .rounded(5).border_1().border_color(on ? t.accent : t.border)
+      .when(on, (el) => el.bg(t.selected))
+      .cursor_pointer().hover((s) => s.bg(t.hover))
+      .on_click((_e, cx) => {
+        const p = this.pickedFor(m, q);
+        if (p.outcome === outcome) return;
+        p.outcome = outcome;
+        p.dirty = true;
+        cx.notify();
+        this.saveAction(m, q, cx);
+      })
+      .child(svg(`${ICONS}/${icon}.svg`).size(11).flex_none().text_color(on ? t.accent : t.dim))
+      .child(div().text_size(11.5).text_color(on ? t.accent : t.foreground).child(label));
+  }
+
+  // An action's Where, opened in the person's browser: `open` on macOS, `xdg-open` where
+  // that is what a desktop answers. The panel itself talks to nothing but the Inbox.
+  openWhere(url) {
+    exec("sh", ["-c", 'command -v open >/dev/null 2>&1 && open "$1" || xdg-open "$1"', "sh", String(url)])
+      .then((r) => {
+        if (r.code !== 0) notify({ title: "Plannotator", body: "The link would not open", level: "error" });
+      })
+      .catch(() => notify({ title: "Plannotator", body: "The link would not open", level: "error" }));
   }
 
   // ---- a thread, drawn ----
@@ -2515,8 +2681,10 @@ export default class Plannotator extends View {
     // how the person finds out what it is waiting on.
     if (cut > 0) {
       const waiting = messages.findIndex((m) => (Array.isArray(m?.questions) ? m.questions : []).some((q) =>
-        q?.kind !== "action" && !q?.set_aside_at && !q?.superseded_by &&
-        !(q?.answer && (Number(q?.sent_revision) || 0) === (Number(q?.revision) || 0))));
+        !q?.set_aside_at && !q?.superseded_by &&
+        (q?.kind === "action"
+          ? !q?.action_result || (Number(q?.sent_revision) || 0) < (Number(q?.revision) || 0)
+          : !(q?.answer && (Number(q?.sent_revision) || 0) === (Number(q?.revision) || 0)))));
       if (waiting >= 0 && waiting < cut) cut = waiting;
     }
     const earlier = messages.slice(0, cut);
@@ -2533,6 +2701,7 @@ export default class Plannotator extends View {
     // Send with no messages behind it has nothing to answer.
     const words = String(this.draft?.value() ?? "").trim();
     const picks = this.unsentPicks(th);
+    const acts = this.unsentActions(th);
     // The comments made on this thread's words, on screen until the Send carries them; the
     // ones made in the browser (or before this run of the panel) are in the Inbox's draft
     // and not here, so the band counts those rather than pretending the draft is empty.
@@ -2540,9 +2709,10 @@ export default class Plannotator extends View {
     const elsewhere = Math.max(0, this.inboxComments - notes.length);
     const carried = [
       picks.length ? `${picks.length} ${picks.length === 1 ? "answer" : "answers"}` : null,
+      acts.length ? `${acts.length} ${acts.length === 1 ? "task" : "tasks"}` : null,
       notes.length ? `${notes.length} ${notes.length === 1 ? "comment" : "comments"}` : null,
     ].filter(Boolean).join(" and ");
-    const can = Boolean(words) || picks.length > 0 || notes.length > 0;
+    const can = Boolean(words) || picks.length > 0 || acts.length > 0 || notes.length > 0;
     const full = Boolean(th && this.draft) && lastAgentOf(messages) !== null;
     // The field *is* the band, not a box inside one. It used to be a bordered, rounded box
     // inset 12 px inside the footer, which put a frame around a frame at the bottom of every

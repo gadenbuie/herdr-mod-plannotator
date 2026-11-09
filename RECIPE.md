@@ -5,7 +5,8 @@ panel that says what is in the Plannotator Inbox — the questions, summaries
 and reviews agents left for the person. Each thread carries a dot for what
 it needs (yellow asks something, blue is new since the person looked, grey
 is read); any thread opens to read its messages in the panel, answer its
-questions by clicking their choices, and reply in words — with the files the
+questions by clicking their choices, mark the todo-style actions the agents
+left (Done, Can't do it, a note), and reply in words — with the files the
 agents attached to those messages drawn and readable there too. Under the threads
 sits the annotate list: the last message, the review, the space's folder, a
 file tree for picking one file or folder, and another folder from a picker —
@@ -46,10 +47,13 @@ the tree — sticks to its space and comes back with it.
   with its author line, the person's own boxed with a 2 px `accent` rule
   down the left — their questions as cards (a dot and the state in its
   colour, ringed choices, a "Recommended" chip on the choice it names, and
-  an "Answer in the Inbox" row), the reply band pinned at the bottom (the
-  field grows 2→8 rows, Send goes live for words or a picked answer, and
+  an "Answer in the Inbox" row) and their `:::action` blocks as todo cards
+  (the two marks Done and Can't do it, a Take back under a mark, the Where
+  link, and the same dot and state), the reply band pinned at the bottom (the
+  field grows 2→8 rows, Send goes live for words or a picked answer or a
+  marked action, and
   the line under it says what the Send carries: "1 answer goes with this
-  reply", "1 answer and 1 comment"), and last an "Open in Inbox for picks
+  reply", "1 answer and 1 task"), and last an "Open in Inbox for picks
   and pictures" row. A comment on the words sits in that band above the
   field — the quote it stands for, its own words, and a ✕ — until the Send
   carries it. Pictures
@@ -168,8 +172,22 @@ the tree — sticks to its space and comes back with it.
   the agent wrote after what was drawn, the Inbox refuses with
   `thread_moved_on`: nothing sends, the words stay in the field, the
   thread re-reads to show what moved it. **This is the whole write
-  surface** — a cursor, an answer's draft, a reply, a comment. No resolve,
-  upload, tag, handoff or skip leaves the panel.
+  surface** — a cursor, an answer's draft, a reply, a comment, a mark. No
+  resolve, upload, tag, handoff or skip leaves the panel.
+- **An action is the todo the agent left, answered here.** `:::action`
+  comes out of the words like a question fence and draws as its own card
+  from the `questions` record: its context, its `Where:` link (opened in
+  the person's browser by `open` or `xdg-open` — the panel itself still
+  talks to nothing but the Inbox), the two marks Done and Can't do it, and
+  the note they carry. A mark POSTs `messages/<id>/actions/<key>` with
+  `{outcome, note?, staged}`, the way the Inbox page stages it to go with
+  the next reply; the Send names the marked ones `{message_id, key}` and
+  the band counts them ("1 task goes with this reply"). The Inbox takes
+  no note without an outcome — a note typed before any mark stays the
+  draft the mark carries — and a mark whose outcome has not moved sends
+  `note_only`, so it does not re-mark. `{outcome: null}` takes a mark
+  back; once the Send has carried it (`sent_revision` caught up), the
+  card reads the result back and nothing on it is clickable.
 - **A comment is filed on a block, because the panel cannot read a
   highlight.** `TextView` and `EditorState` hand out no selection, and a
   `copy` a mod dispatches moves nothing, so the words a comment is about
