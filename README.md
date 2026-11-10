@@ -18,8 +18,9 @@ session, it arrives as a Herdr toast the second it happens — panel open or
 not. When the session brought back annotations, the toast says how many and a
 click copies them, and the panel's footer holds them: copy them again, or paste
 them into the terminal you are on (pasted, not sent — Return is yours), or put
-the footer away with its ✕. The footer is the newest run with annotations,
-read from the session logs, so it is there after a restart too.
+the footer away with its ✕. The footer is the newest run with annotations asked
+for from this space — other spaces' annotations don't show in it — read from the
+session logs, so it is there after a restart too.
 
 ![Plannotator](preview.png)
 

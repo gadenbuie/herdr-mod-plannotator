@@ -305,7 +305,7 @@ the tree — sticks to its space and comes back with it.
   copies read at once the toast fires once. A run whose JSON carries
   `feedback` (not `nothingToSend`, not dismissed) toasts "N annotations —
   click to copy" with `action: plannotator.copy-last`; the same JSON is read
-  by `latestFeedback` into the footer's `last`. Paste is `pane.focus` on the
+  by `recentFeedback` into `lasts`; the footer's `last()` is the newest whose log's `__space` is this space (older logs, with none: whose `__cwd`/target is inside this space's folder). A toast's click copies the run it announced. Paste is `pane.focus` on the
   focused terminal (else `shown`, else the space's agent), a beat, then
   `terminal.paste` of the clipboard — never `hc send`, which presses Return.
 - **Mod keys reach an on-screen copy only.** `plannotator.palette`,
