@@ -302,7 +302,12 @@ the tree — sticks to its space and comes back with it.
 - **A decision is a Herdr toast the moment it lands.** The watcher reads
   the sessions folder for a log with `__exit` and no `__told`, posts
   `notify()` for up to three, and marks each as it goes, so however many
-  copies read at once the toast fires once.
+  copies read at once the toast fires once. A run whose JSON carries
+  `feedback` (not `nothingToSend`, not dismissed) toasts "N annotations —
+  click to copy" with `action: plannotator.copy-last`; the same JSON is read
+  by `latestFeedback` into the footer's `last`. Paste is `pane.focus` on the
+  focused terminal (else `shown`, else the space's agent), a beat, then
+  `terminal.paste` of the clipboard — never `hc send`, which presses Return.
 - **Mod keys reach an on-screen copy only.** `plannotator.palette`,
   `.last`, `.review`, `.annotate` and `.inbox` arrive through
   `nextCommand()` and work while the panel's tab shows; with the panel

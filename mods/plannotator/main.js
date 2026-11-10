@@ -213,7 +213,7 @@ for f in *.log; do
   [ "$(grep -m 1 '^__told' "$f")" = "$mark" ] || continue
   label=$(sed -n '1s/^__label //p' "$f")
   word=$(grep -o '"decision": *"[a-z]*"' "$f" | tail -n 1 | cut -d'"' -f4)
-  printf '%s: %s\\n' "\${label:-Plannotator}" "\${word:-finished}"
+  printf '%s\\t%s: %s\\n' "$PWD/$f" "\${label:-Plannotator}" "\${word:-finished}"
 done`;
 
 // Two shown copies (the panel and a tab of the same mod) both get a key command;
@@ -251,6 +251,42 @@ function start(args, label, folder) {
 
 function fail(body) {
   notify({ title: "Plannotator", body: String(body ?? "Plannotator did not start").trim().slice(0, 200), level: "error" });
+}
+
+// The words a finished run left for the agent: the `feedback` of its decision, when
+// there is any (a dismissal, and a review with nothing to send, leave none). The log's
+// last line before `__exit` is the CLI's JSON; its stamp is when the run began.
+async function feedbackIn(file) {
+  let text;
+  try { text = await readTextFile(file); } catch { return null; }
+  if (!text) return null;
+  const end = text.indexOf("\n__exit");
+  const from = end < 0 ? -1 : text.lastIndexOf("\n{", end);
+  if (from < 0) return null;
+  let d;
+  try { d = JSON.parse(text.slice(from + 1, end)); } catch { return null; }
+  const words = String(d?.feedback ?? "").trim();
+  if (!words || d.nothingToSend || d.decision === "dismissed") return null;
+  const m = /(\d{4}-\d\d-\d\d)T(\d\d)-(\d\d)-(\d\d)/.exec(file);
+  return {
+    file, words,
+    label: /^__label (.*)$/m.exec(text)?.[1]?.trim() || "Plannotator",
+    count: Number(d.annotationCount) || 0,
+    at: m ? Date.parse(`${m[1]}T${m[2]}:${m[3]}:${m[4]}Z`) : Date.now(),
+  };
+}
+
+// The newest run that left words, from the logs themselves — so a copy of the panel that
+// opens after the run ended still holds it. Names start with their stamp: newest sorts last.
+async function latestFeedback() {
+  let out;
+  try { out = await exec("sh", ["-c", 'ls -r "$1"/*.log 2>/dev/null | head -20', "plannotator", RUNS()]); } catch { return null; }
+  for (const file of String(out.stdout ?? "").split("\n").map((s) => s.trim()).filter(Boolean)) {
+    if (!/\.log$/.test(file)) continue;
+    const r = await feedbackIn(file);
+    if (r) return r;
+  }
+  return null;
 }
 
 // The Inbox, asked once: `asked("GET", "threads")`, or a POST with its body. Its
@@ -757,6 +793,8 @@ export default class Plannotator extends View {
     // One save at a time per question, chained by question id: see `savePick`.
     this.saving = new Map();
     this.cardError = null;
+    // The newest annotations a run brought back (`findLast`): the footer's handle.
+    this.last = null;
     // `at` is the palette's highlighted row; `cursor` is the panel's.
     this.cursor = 0;
     // What the shared state key held as this copy last saw it — what it wrote or
@@ -786,6 +824,7 @@ export default class Plannotator extends View {
     this.reload(cx);
     // What the runs decided while the panel was shut is the first thing it says.
     this.announce(cx);
+    this.findLast(cx);
     // The store is live: a message anywhere in it shows up at once, no polling.
     cx.spawn(async (cx) => {
       for (;;) {
@@ -819,6 +858,8 @@ export default class Plannotator extends View {
         else if (command === "annotate") {
           this.launch(() => (at ? start(["annotate", at], "Annotate all files") : this.pick()));
         } else if (command === "inbox") this.launch(() => openInbox());
+        else if (command === "copy-last") this.copyLast(cx);
+        else if (command === "paste-last") this.pasteLast(cx);
         cx.notify();
       }
     });
@@ -1724,10 +1765,62 @@ export default class Plannotator extends View {
         return;
       }
       if (out.code !== 0) return;
-      const lines = String(out.stdout ?? "").split("\n").map((s) => s.trim()).filter(Boolean);
-      for (const line of lines.slice(0, 3)) notify({ title: "Plannotator", body: line });
+      const lines = String(out.stdout ?? "").split("\n").filter((s) => s.trim());
+      for (const raw of lines.slice(0, 3)) {
+        const [file, ...rest] = raw.split("\t");
+        const body = rest.join("\t").trim();
+        // A run that left annotations says so, and a click on its toast copies them — a toast
+        // has one action; pasting into a terminal is the footer's.
+        const got = await feedbackIn(file);
+        if (got) {
+          notify({ title: "Plannotator", level: "success", timeout: 15000,
+            body: `${got.label}: ${got.count ? `${got.count} ` : ""}${got.count === 1 ? "annotation" : "annotations"} — click to copy`,
+            action: { name: "plannotator.copy-last" } });
+        } else notify({ title: "Plannotator", body });
+      }
       if (lines.length > 3) notify({ title: "Plannotator", body: `${lines.length - 3} more in the sessions folder` });
+      this.findLast(cx);
     });
+  }
+
+  // The footer's handle: the newest annotations a run left, unless the person put it away.
+  findLast(cx) {
+    cx.spawn(async (cx) => {
+      const r = await latestFeedback();
+      if (r?.file === this.last?.file) return;
+      this.last = r && r.file !== localStorage.getItem("plannotator.last.away") ? r : null;
+      cx.notify();
+    });
+  }
+
+  copyLast(cx) {
+    if (!this.last) return;
+    cx.write_to_clipboard(this.last.words);
+    notify({ title: "Plannotator", body: "Annotations copied", level: "success", timeout: 3000 });
+  }
+
+  // Into the terminal the person is on, or the one the space's agent is in: the text is
+  // pasted and left for them to read and send — Return is theirs.
+  pasteLast(cx) {
+    const last = this.last;
+    if (!last) return;
+    const f = focused();
+    const terminal = f?.terminal ?? f?.shown ?? f?.agent;
+    if (!terminal) return fail("No terminal to paste into");
+    cx.write_to_clipboard(last.words);
+    cx.spawn(async () => {
+      try {
+        run("pane.focus", { terminal });
+        await exec("sh", ["-c", "sleep 0.15"]);
+        run("terminal.paste");
+      } catch (e) { fail(e?.message); }
+    });
+  }
+
+  awayLast(cx) {
+    if (this.last) localStorage.setItem("plannotator.last.away", this.last.file);
+    this.last = null;
+    cx.notify();
   }
 
   // A folder's children, once: the tree keeps them while it is open.
@@ -1903,12 +1996,12 @@ export default class Plannotator extends View {
     cx?.notify();
   }
 
-  iconButton(id, icon, action) {
+  iconButton(id, icon, action, from = ICONS) {
     const t = theme();
     return div().id(id).size(24).flex_none().flex().items_center().justify_center().rounded(6)
       .text_color(t.muted).hover((s) => s.bg(t.hover).text_color(t.foreground))
       .on_click(action)
-      .child(svg(`${ICONS}/${icon}.svg`).size(14));
+      .child(svg(`${from}/${icon}.svg`).size(14));
   }
 
   // ---- the palette ----
@@ -2134,10 +2227,28 @@ export default class Plannotator extends View {
                 .child(open ? "Files" : `Files · ${this.kids.has(at) ? kids(at).length : "…"}`)))
             .children(rows))
           .child(action("pick", "folder-plus", "Another folder…", () => this.pick())))))
+      // The last annotations a run brought back: a handle to copy them, or to paste them into
+      // the terminal the person is on. Drawn on every page, under the scrolling part.
+      .when(Boolean(this.last), (el) => el.child(this.renderLast()))
       // A bar whose highlight ended in the air around a paragraph has no paragraph to be
       // drawn in, so it is drawn here, after the page: on top of it, at the point the drag
       // reached. Last child on purpose — an earlier one would be behind the page.
       .when(this.aiming?.where === "root", (el) => el.child(this.renderNoteBar()));
+  }
+
+  // The footer: what came back, from which run, how long ago, and what to do with it:
+  // copy, paste into the terminal, or put it away.
+  renderLast() {
+    const t = theme(), last = this.last;
+    const n = last.count ? `${last.count} ${last.count === 1 ? "annotation" : "annotations"}` : "Annotations";
+    return h_flex().id("pl-last").h(40).flex_none().px(14).gap(8).items_center().border_t(1).border_color(t.border)
+      .child(svg(`${ICONS}/square-pen.svg`).size(14).flex_none().text_color(t.accent))
+      .child(v_flex().flex_1().min_w(0)
+        .child(div().truncate().text_size(12).child(n))
+        .child(div().truncate().text_size(11).text_color(t.dim).child(`${last.label} · ${ago(last.at)}`)))
+      .child(this.iconButton("pl-last-copy", "copy", (_e, cx) => this.copyLast(cx), OWN))
+      .child(this.iconButton("pl-last-paste", "terminal", (_e, cx) => this.pasteLast(cx)))
+      .child(this.iconButton("pl-last-away", "x", (_e, cx) => this.awayLast(cx)));
   }
 
   // ---- answering a question ----

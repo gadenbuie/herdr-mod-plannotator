@@ -25,7 +25,7 @@ the code.
 - `mods/plannotator/mod.json` — the tab manifest `tab-host` reads; see the
   README's table.
 - `mods/plannotator/icon.svg`, `image.svg`, `video.svg`, `code.svg`,
-  `trash.svg`, `thumbs-up.svg` — the button's glyph, the ones a message's
+  `trash.svg`, `thumbs-up.svg`, `copy.svg` — the button's glyph, the ones a message's
   attached files wear, and the two the comment bar's shortcuts wear, all
   `currentColor` strokes so the theme tints them.
 - `keys.json` — the six `global` bindings this mod expects, merged into

@@ -15,7 +15,11 @@ without leaving the terminal — and read the files the agent attached to it:
 a picture drawn where it was sent, a document, a code file or a patch one
 click from its own read-only page. When a decision is made in a Plannotator
 session, it arrives as a Herdr toast the second it happens — panel open or
-not.
+not. When the session brought back annotations, the toast says how many and a
+click copies them, and the panel's footer holds them: copy them again, or paste
+them into the terminal you are on (pasted, not sent — Return is yours), or put
+the footer away with its ✕. The footer is the newest run with annotations,
+read from the session logs, so it is there after a restart too.
 
 ![Plannotator](preview.png)
 
