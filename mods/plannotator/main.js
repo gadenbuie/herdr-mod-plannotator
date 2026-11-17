@@ -943,6 +943,14 @@ export default class Plannotator extends View {
     this.loadThread(cx);
   }
 
+  // The thread's id, for a command line that wants to name the thread it is about.
+  copyThreadId(cx) {
+    const id = this.opened?.thread?.id;
+    if (!id) return;
+    cx.write_to_clipboard(id);
+    notify({ title: "Plannotator", body: "Thread id copied", level: "success", timeout: 3000 });
+  }
+
   // The reply field, made on first use. `TextareaState.new` needs a live host call, so
   // this is only ever reached from an event handler (`openThread`), never from a render.
   field(cx) {
@@ -2882,11 +2890,16 @@ export default class Plannotator extends View {
     // conversation scrolls — a project that scrolled away would leave the person reading
     // messages with no idea whose thread they are, and a field that scrolled away would
     // have to be found before every reply.
+    // The head carries the thread's id at its right, one press away while the thread is
+    // on screen. Only when the thread has loaded: an id the read failed to bring has
+    // nothing to copy.
+    const head = h_flex().id("pl-thread-head").h(26).flex_none().px(14).gap(6).items_center().border_b(1)
+      .border_color(t.border)
+      .child(div().flex_1().min_w(0).truncate().text_size(11).text_color(t.dim)
+        .child([th?.project?.name, Number.isFinite(at) ? ago(at) : null].filter(Boolean).join(" · ")));
+    if (th) head.child(this.iconButton("pl-copy-id", "copy", (_e, cx) => this.copyThreadId(cx), OWN));
     return v_flex().id("pl-thread").flex_1().min_h(0).w_full().max_w(760)
-      .child(h_flex().id("pl-thread-head").h(26).flex_none().px(14).gap(6).items_center().border_b(1)
-        .border_color(t.border)
-        .child(div().flex_1().min_w(0).truncate().text_size(11).text_color(t.dim)
-          .child([th?.project?.name, Number.isFinite(at) ? ago(at) : null].filter(Boolean).join(" · "))))
+      .child(head)
       .child(v_flex().id("pl-thread-scroll").flex_1().min_h(0).w_full().overflow_y_scrollbar().py(4)
         .when(!th && !o?.error, (el) => el.child(v_flex().px(14).py(6)
           .child(div().text_color(t.muted).child("Reading the thread…"))))

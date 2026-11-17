@@ -400,6 +400,12 @@ the tree — sticks to its space and comes back with it.
   host draws "cx is no longer valid" across the panel.
 - **State made during a render throws.** `TextareaState`, `InputState` and
   focus handles are made from event handlers or tasks, never in `render`.
+- **A `.when` chained after a `.child` put its child below the row, not
+  inside it.** The thread head's copy-id button was appended with
+  `.child(…).when(cond, el => el.child(…))` and rendered as its own row
+  under the head; the same `.when` directly after style methods (the top
+  toolbar, the reply field) is fine. Conditional rows are built with a
+  statement `if (th) head.child(…)` on a named element instead.
 - **Two methods of one name on a class is the second one winning
   silently** — not overloads. `field(cx)` and `answerField(...)` are two
   names because of it.
