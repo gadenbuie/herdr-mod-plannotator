@@ -943,9 +943,11 @@ export default class Plannotator extends View {
     this.loadThread(cx);
   }
 
-  // The thread's id, for a command line that wants to name the thread it is about.
+  // The thread's id, for a command line that wants to name the thread it is about. The
+  // id is the page's (`this.opened.id`, what `GET threads/<id>` and `prune` name), not
+  // a field the thread record itself carries.
   copyThreadId(cx) {
-    const id = this.opened?.thread?.id;
+    const id = this.opened?.id;
     if (!id) return;
     cx.write_to_clipboard(id);
     notify({ title: "Plannotator", body: "Thread id copied", level: "success", timeout: 3000 });
