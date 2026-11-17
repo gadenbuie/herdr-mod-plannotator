@@ -255,8 +255,13 @@ function fail(body) {
 }
 
 // The words a finished run left for the agent: the `feedback` of its decision, when
-// there is any (a dismissal, and a review with nothing to send, leave none). The log's
-// last line before `__exit` is the CLI's JSON; its stamp is when the run began.
+// there is any (a dismissal, and a review with nothing to send, leave none). `annotate`
+// — a file, a folder — and `last` bring the raw feedback back in `feedback`; `review`
+// brings its rendered page back in `message` instead, the same words the plaintext run
+// would have printed, with the instructions to the agent at the end kept whole. An
+// approval's `message` is the approval prompt, not findings, so only an annotated
+// decision may fall back to it. The log's last line before `__exit` is the CLI's JSON;
+// its stamp is when the run began.
 async function feedbackIn(file) {
   let text;
   try { text = await readTextFile(file); } catch { return null; }
@@ -266,7 +271,7 @@ async function feedbackIn(file) {
   if (from < 0) return null;
   let d;
   try { d = JSON.parse(text.slice(from + 1, end)); } catch { return null; }
-  const words = String(d?.feedback ?? "").trim();
+  const words = String(d?.feedback ?? (d?.decision === "annotated" ? d?.message : null) ?? "").trim();
   if (!words || d.nothingToSend || d.decision === "dismissed") return null;
   const m = /(\d{4}-\d\d-\d\d)T(\d\d)-(\d\d)-(\d\d)/.exec(file);
   return {

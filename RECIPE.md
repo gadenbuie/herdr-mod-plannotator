@@ -308,6 +308,13 @@ the tree — sticks to its space and comes back with it.
   by `recentFeedback` into `lasts`; the footer's `last()` is the newest whose log's `__space` is this space (older logs, with none: whose `__cwd`/target is inside this space's folder). A toast's click copies the run it announced. Paste is `pane.focus` on the
   focused terminal (else `shown`, else the space's agent), a beat, then
   `terminal.paste` of the clipboard — never `hc send`, which presses Return.
+  The three buttons do not speak one JSON: `annotate` (a file, a folder —
+  "This space", "Another folder…") and `last` bring the raw text back in
+  `feedback`, with `annotationCount`; `review` brings its rendered page back
+  in `message` — the words the plaintext run would print, the instructions
+  to the agent at the end kept whole — and no count. `feedbackIn` takes
+  `feedback`, and falls back to `message` for an `annotated` decision only:
+  an approval's `message` is the approval prompt, not findings.
 - **Mod keys reach an on-screen copy only.** `plannotator.palette`,
   `.last`, `.review`, `.annotate` and `.inbox` arrive through
   `nextCommand()` and work while the panel's tab shows; with the panel
