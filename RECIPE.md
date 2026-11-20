@@ -209,10 +209,17 @@ the tree — sticks to its space and comes back with it.
   card reads the result back and nothing on it is clickable.
 - **A comment is filed on a block, because the panel cannot read a
   highlight.** `TextView` and `EditorState` hand out no selection, and a
-  `copy` a mod dispatches moves nothing, so the words a comment is about
-  are the ones in the paragraph under the pointer: a press and release in
+  `copy` a mod dispatches moves nothing — the action reaches no handler that
+  holds the selection, and an attempt wipes the clipboard — so the words a
+  comment is about are the ones in the paragraph under the pointer: a press
+  and release in
   the same block with 4 px of travel between them (a click is a click)
   opens the "Comment" bar, and the block's first line is the quote.
+  The one road a highlight's words take out of the host is `cmd+c`: the
+  native copy works, and the mod reads the clipboard (`copied`). A snapshot
+  of the clipboard at the press makes the copy the gesture's own — only a
+  clipboard changed between press and comment, naming words the block
+  holds, becomes the quote; anything else falls back to the block's line.
   `rowsOf` cuts a message's markdown into the blocks that survive being
   drawn alone — checked against a sample board with `herdr-app shot`: a
   top-level list item (`- `, `1. `) is a block of its own, carrying its

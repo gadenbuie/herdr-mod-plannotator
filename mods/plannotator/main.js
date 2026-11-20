@@ -855,6 +855,8 @@ export default class Plannotator extends View {
     // carried by the next Send. `notedFor` is the thread those belong to, `inboxComments`
     // how many its draft holds, which the browser may have added to.
     this.pressed = null;
+    // What the clipboard held when the gesture began: `copied` measures a copy against it.
+    this.clipBefore = undefined;
     this.aiming = null;
     this.commenting = null;
     this.notes = [];
@@ -1295,11 +1297,29 @@ export default class Plannotator extends View {
 
   // ---- a comment on the words ----
 
+  // The words a `cmd+c` put on the clipboard while the gesture ran, when they are words
+  // this block holds. The host's `TextView` keeps the person's selection to itself —
+  // neither `TextView` nor `EditorState` hands one out, and a `copy` the mod dispatches
+  // reaches no handler that has one (the probe showed the clipboard coming back empty,
+  // its old contents gone) — so the clipboard is the only road a highlight's words take
+  // out of the host, and `cmd+c`, the native one, works. A snapshot at the press is what
+  // makes the copy the gesture's own: the clipboard only counts when the gesture changed
+  // it, and only when the copied words stand in the block the comment is anchored to — a
+  // copy from another app, or an older one, is never mistaken for the highlight.
+  copied(block, cx) {
+    let now;
+    try { now = cx?.read_from_clipboard(); } catch { return null; }
+    if (typeof now !== "string" || now === this.clipBefore || !now.trim()) return null;
+    return block.includes(now) ? now : null;
+  }
+
   // A press inside a block: where it landed, on what. A drag is read at the release, in
   // `aimUp` — a click to hand the panel the keyboard, or to put a highlight away, opens
   // nothing.
-  aimDown(key, e, target, block) {
+  aimDown(key, e, target, block, cx) {
     const at = e?.local_position ?? { x: 0, y: 0 };
+    // What the clipboard holds as the gesture begins, for `copied` to measure against.
+    try { this.clipBefore = cx?.read_from_clipboard(); } catch { this.clipBefore = undefined; }
     this.pressed = {
       key, target, block, when: Date.now(),
       x: Number(e?.position?.x) || 0, y: Number(e?.position?.y) || 0,
@@ -1382,8 +1402,9 @@ export default class Plannotator extends View {
 
   // The field for a comment on one block — or on a whole file, which has no block to press
   // in: the code view is the `Editor`'s, and the row under the facts is its way in.
-  // `quote` names the line the comment stands for, and is `quoteOf(block)` unless the anchor
-  // already is one line the panel must not reword: a picture's own name.
+  // `quote` names the line the comment stands for: the words a `cmd+c` copied out of the
+  // highlight while the gesture ran (`copied`), else `quoteOf(block)` — unless the anchor
+  // already is one line the panel must not reword, a picture's own name.
   openCommentOn(key, target, block, cx, quote = null) {
     this.closeComment(cx);
     const field = TextareaState.new({
@@ -1393,7 +1414,7 @@ export default class Plannotator extends View {
     field.on("submit", (e, cx) => { if (e?.secondary === true) this.saveNote(cx); });
     field.on("focus", (_e, cx) => { this.writing = true; cx.notify(); });
     field.on("blur", (_e, cx) => { this.writing = false; cx.notify(); });
-    this.commenting = { key, target, block, quote: quote ?? quoteOf(block), field };
+    this.commenting = { key, target, block, quote: quote ?? (this.copied(block, cx) ?? quoteOf(block)), field };
     this.pressed = null;
     cx?.notify();
     // The caret goes in once the frame that draws the field is there: a field made and
@@ -1456,7 +1477,7 @@ export default class Plannotator extends View {
     const a = this.aiming;
     if (!a) return;
     this.aiming = null;
-    this.addNote(a.target, quoteOf(a.block), words, cx);
+    this.addNote(a.target, this.copied(a.block, cx) ?? quoteOf(a.block), words, cx);
   }
 
   // A staged comment put away: the Inbox's draft goes with it, so the page and the panel go
@@ -1481,15 +1502,14 @@ export default class Plannotator extends View {
     const t = theme();
     const bar = this.aiming?.key === key && this.aiming?.where !== "root" ? this.renderNoteBar() : null;
     const box = this.commenting?.key === key ? this.renderNoteField() : null;
-    // The handlers are on the words as well as on the box around them: a press the text
-    // takes for its own selection still reaches the element that owns it, and `aimUp` is
-    // idempotent because both of them are asked.
+    // The handlers sit on the box around the words, and on no other element: a `TextView`
+    // takes none of the pointer handlers — the shell wires its own listeners on the
+    // elements it owns outright, and warned when the panel tried. A press the text takes
+    // for its own selection still reaches the box that owns the `TextView`.
     return v_flex().id(`pl-blk-${key}`).w_full().flex_none().relative()
-      .on_mouse_down("left", (e) => this.aimDown(key, e, target, block))
+      .on_mouse_down("left", (e, cx) => this.aimDown(key, e, target, block, cx))
       .on_mouse_up("left", (e, cx) => this.aimUp(key, e, target, block, cx))
-      .child(TextView.markdown(`pl-md-${key}`, block).selectable()
-        .on_mouse_down("left", (e) => this.aimDown(key, e, target, block))
-        .on_mouse_up("left", (e, cx) => this.aimUp(key, e, target, block, cx)))
+      .child(TextView.markdown(`pl-md-${key}`, block).selectable())
       .when(Boolean(bar), (el) => el.child(bar))
       .when(Boolean(box), (el) => el.child(box));
   }
