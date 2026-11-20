@@ -634,25 +634,76 @@ function wordsWithoutQuestions(body) {
     .replace(/\n{3,}/g, "\n\n").trim();
 }
 
-// A message's, or a document's, words cut into the blocks a comment can be put on: a
-// blank line ends one, and a fenced code block is one block however empty the lines inside
-// it are. The panel cannot read the person's selection — Herdr hands a mod no way to ask
-// for one, and the text's own selection belongs to the host — so the block under the
-// pointer is the anchor: its first line is the quote, and the whole block is the words the
-// comment is about. Nothing else has to be true of the markdown for this to hold: a block
-// split at a blank line renders as the same markdown it did inside the whole. `rowsOf` keeps
-// each block's line numbers too, which is what lets a comment on a file name the lines it is
-// about — a message's lines are nobody's to count.
+// A message's, or a document's, words cut into the blocks a comment can be put on. The
+// panel cannot read the person's selection — Herdr hands a mod no way to ask for one, and
+// the text's own selection belongs to the host — so the block under the pointer is the
+// anchor: its first line is the quote, and the whole block is the words the comment is
+// about. What ends a block is what can be cut and still render as the markdown it did
+// inside the whole, and the probe (`herdr-app shot` against a sample board) settled where
+// that line sits:
+//
+// - A top-level list item (`- `, `* `, `1. `) starts a block of its own, and carries its
+//   own paragraphs and its nested lists with it: an item alone keeps its number (`3.` on
+//   its own still renders 3), but a nested bullet alone loses its indent, so it stays.
+//   Without this a whole list is one block and every comment on it quotes item 1.
+// - A blank line ends a block only when a flush-left line that is neither a list marker
+//   nor indented follows. What follows a list otherwise is the list's own — an item's
+//   hanging paragraph or a nested bullet — and cutting it out would draw it flush-left
+//   where it hung indented; kept in, `TextView` renders the loose list as it was written.
+// - A fenced code block is one block however empty the lines inside it are.
+//
+// `rowsOf` keeps each block's line numbers too, which is what lets a comment on a file
+// name the lines it is about — a message's lines are nobody's to count.
 function rowsOf(text) {
+  const lines = String(text ?? "").split("\n");
   const out = [];
-  let block = [], fence = false, first = 1, last = 1;
-  String(text ?? "").split("\n").forEach((line, i) => {
+  let block = [], fence = false, first = 1, last = 1, blanks = 0;
+  // A list item's marker: `*emphasis*` is no marker — the space after the mark is what
+  // says bullet. Whether the item is top-level is not a fixed indent: a nested bullet
+  // three spaces in is inside the item above it, so a marker starts a block of its own
+  // only when it sits no deeper than the block's first line does.
+  const marker = (line) => /^(?:[-*+]|\d+[.)])\s/.test(line.trimStart());
+  const indent = (line) => {
+    const n = line.search(/[^ \t]/);
+    return n < 0 ? 0 : line.slice(0, n).replace(/\t/g, "    ").length;
+  };
+  const flush = () => {
+    if (block.length > 0) out.push({ block: block.join("\n"), first, last });
+    block = [];
+    blanks = 0;
+  };
+  lines.forEach((line, i) => {
     const at = i + 1;
-    if (/^\s*(?:```|~~~)/.test(line)) fence = !fence;
+    const opens = /^\s*(?:```|~~~)/.test(line);
+    if (opens) fence = !fence;
     if (!fence && line.trim() === "") {
-      if (block.length > 0) out.push({ block: block.join("\n"), first, last });
-      block = [];
+      if (block.length === 0) return;
+      // The next line with words decides what the blank line meant. The block carries
+      // on when it is the list's own — an indented line, the item's paragraph, or an
+      // item nested in it (a top-level item's marker splits when that line comes) —
+      // and ends when a flush-left line that is neither follows, as a blank line
+      // always ended a paragraph. A blank line the block carries on past is kept, as
+      // the paragraph break it is; one a block ends at is dropped with the block's
+      // end, so no block trails an empty line.
+      let next = i + 1;
+      while (next < lines.length && lines[next].trim() === "") next += 1;
+      const coming = next < lines.length ? lines[next] : "";
+      if (!coming || /^[ \t]/.test(coming)
+        || (marker(coming) && indent(coming) > indent(block[0]))) {
+        blanks += 1;
+        return;
+      }
+      flush();
       return;
+    }
+    // A held paragraph break goes back in before the words it sits between — a fence
+    // line included, or the break before a fence in a list item would come out after
+    // the whole fence. A marker that starts a new block ends the old one instead, and
+    // the break it followed goes with it.
+    if (marker(line) && !opens && block.length > 0 && indent(line) <= indent(block[0])) {
+      flush();
+    } else if (blanks > 0 && block.length > 0) {
+      while (blanks > 0) { block.push(""); blanks -= 1; }
     }
     // The line numbers a file's comment can name: the block's own, in the file on screen,
     // from its first line to the last one that carries words.
@@ -660,7 +711,7 @@ function rowsOf(text) {
     last = at;
     block.push(line);
   });
-  if (block.length > 0) out.push({ block: block.join("\n"), first, last });
+  flush();
   return out.filter((r) => r.block.trim() !== "");
 }
 
@@ -670,11 +721,17 @@ function blocksOf(text) {
 
 // The line a comment stands for, as the band over the field shows it: the block's first
 // line with the markdown that marks a block off taken away — a heading's hashes, a quote's
-// chevron, a list's bullet — and cut where a 368 px column would cut it anyway.
+// chevron, a list's bullet — and cut where a 368 px column would cut it anyway. A block
+// that opens with a fence quotes the fence's first line of code instead — the fence line
+// itself says nothing — and "code" when the fence holds none.
 function quoteOf(block) {
-  const line = String(block ?? "").split("\n").map((l) => l.trim()).find(Boolean) ?? "";
+  const lines = String(block ?? "").split("\n").map((l) => l.trim());
+  const at = lines.findIndex(Boolean);
+  let line = lines[at] ?? "";
+  if (/^(?:```|~~~)/.test(line)) {
+    line = lines.slice(at + 1).find(Boolean) ?? "code";
+  }
   const plain = line
-    .replace(/^(?:```|~~~).*$/, "code")
     .replace(/^#{1,6}\s+/, "")
     .replace(/^>\s*/, "")
     .replace(/^(?:[-*+]|\d+[.)])\s+/, "")

@@ -213,17 +213,23 @@ the tree — sticks to its space and comes back with it.
   are the ones in the paragraph under the pointer: a press and release in
   the same block with 4 px of travel between them (a click is a click)
   opens the "Comment" bar, and the block's first line is the quote.
-  `rowsOf` cuts a message's markdown at its blank lines — a fence stays
-  whole — and every block is drawn as its own `TextView`, so a selection
+  `rowsOf` cuts a message's markdown into the blocks that survive being
+  drawn alone — checked against a sample board with `herdr-app shot`: a
+  top-level list item (`- `, `1. `) is a block of its own, carrying its
+  hanging paragraphs and nested lists (an item alone keeps its number; a
+  nested bullet alone loses its indent, so it stays); a blank line ends a
+  block only when a flush-left, non-list line follows, so a loose list
+  keeps its shape; a fence stays whole. Every block is drawn as its own
+  `TextView`, so a selection
   cannot run across two paragraphs and the anchor is never guessed. A file's
-  blocks carry their line numbers as well (a paragraph reads "lines 3-5"),
+  blocks carry their line numbers as well (a list item reads its own
+  "lines 3-5"),
   which is what a comment on a file can name; a message's cannot, the agent's
   words being nobody's numbered lines. The code view has no blocks to press,
   so it has one row instead, "Comment on this file", above the `Editor`:
   that one is a `GLOBAL_COMMENT`, the Inbox's own general comment, with no
-  lines to name. Nothing else has to be true of the markdown
-  for this to hold: a block cut at a blank line renders as the same
-  markdown it did inside the whole.
+  lines to name. A block that opens with a fence quotes its first line of
+  code, not the fence line — "code" said nothing.
 - **A picture has no document under it, so its comment is the whole
   picture.** The row that opens it is in the picture's dialog and above the
   picture on its page — "Comment on this picture" — and the field it opens
