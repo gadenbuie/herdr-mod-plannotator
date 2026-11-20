@@ -172,7 +172,8 @@ the tree — sticks to its space and comes back with it.
   skip — the card's own Skip, as the page's — is a record of the same
   shape that names no choice (`answer.skipped`, a note beside it is
   welcome): "Skipped, not sent" in `accent` before the Send, "Skipped" in
-  `dim` once it has gone, and what the person does after it replaces it.
+  `dim` once it has gone, and what the person does after it replaces it —
+  a note after a skip is a note on the skip, not a taking of it back.
   Beside Skip the card carries Accept recommended when the recommendation
   names one of the choices — the pick, saved like a click. If
   the agent wrote after what was drawn, the Inbox refuses with

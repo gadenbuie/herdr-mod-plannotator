@@ -2346,6 +2346,7 @@ export default class Plannotator extends View {
         note: String(a.note ?? ""),
         text: String(a.text ?? ""),
         outcome: q?.kind === "action" ? (a.outcome ?? null) : null,
+        skipped: q?.kind === "action" ? false : Boolean(a.skipped),
         dirty: false,
       };
       this.picked.set(id, p);
@@ -2449,13 +2450,18 @@ export default class Plannotator extends View {
       const answer = {
         v: 1, key: current.key, kind: current.kind, prompt: current.prompt,
         selected: current.kind === "single" ? p.selected.slice(0, 1) : p.selected,
+        // A skip the card holds stays in the record until a real answer replaces it: a note
+        // committed after a skip is a note on the skip, not a taking of it back.
+        ...(p.skipped ? { skipped: true } : {}),
         ...(p.other.trim() ? { other: p.other } : {}),
         ...(p.text.trim() ? { text: p.text } : {}),
         ...(p.note.trim() ? { note: p.note } : {}),
       };
       // Nothing chosen, nothing typed: `null` is how a pick is cleared, and how a card that
-      // was clicked twice goes back to unanswered.
-      const empty = answer.selected.length === 0 && !answer.other && !answer.text && !answer.note;
+      // was clicked twice goes back to unanswered. A skip is not nothing — it goes out even
+      // when no choice is named — so it counts only through its own flag above.
+      const empty = answer.selected.length === 0 && !answer.other && !answer.text && !answer.note
+        && !answer.skipped;
       return asked("POST", `messages/${m.id}/picks`, {
         questions: [{ key: current.key, revision: current.revision, answer: empty ? null : answer }],
       }).then((data) => {
@@ -2600,6 +2606,8 @@ export default class Plannotator extends View {
     p.selected = q?.kind === "multi"
       ? (p.selected.includes(label) ? p.selected.filter((x) => x !== label) : [...p.selected, label])
       : (p.selected.includes(label) ? [] : [label]);
+    // A click on a choice is an answer, and an answer replaces a skip.
+    p.skipped = false;
     // Their own option and one of the question's are alternatives, not both, on a single
     // question: "Other" is an answer in its own right, which is how the page reads it back
     // ("Other: …"). The field is emptied with it, because text left in it would be a second
@@ -2622,9 +2630,10 @@ export default class Plannotator extends View {
     p.dirty = true;
     p[slot] = value;
     // On a single question an own option is the answer, and the rings step down for it;
-    // on a multi one the two stand together. A written answer is the whole answer either way.
-    if (slot === "other" && value.trim() && q?.kind !== "multi") p.selected = [];
-    if (slot === "text") p.selected = [];
+    // on a multi one the two stand together. A written answer is the whole answer either
+    // way. Words in the answer's own slots replace a skip; a note does not.
+    if (slot === "other" && value.trim() && q?.kind !== "multi") { p.selected = []; p.skipped = false; }
+    if (slot === "text") { p.selected = []; p.skipped = false; }
     cx?.notify();
     if (q?.kind === "action") this.saveAction(m, q, cx);
     else this.savePick(m, q, cx);
