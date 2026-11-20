@@ -13,7 +13,9 @@ file tree for picking one file or folder, and another folder from a picker —
 each starts a background `plannotator` session in the folder being worked
 in. A decision made in a Plannotator session lands as a Herdr toast the
 second it happens, panel open or not, because the panel's tab keeps running
-while it is hidden. The view — the thread on screen, the folders open in
+while it is hidden — and one that brought annotations back comes as the
+panel's own toast popup, the footer styled as a card with its three buttons
+on it. The view — the thread on screen, the folders open in
 the tree — sticks to its space and comes back with it.
 
 ![Plannotator](preview.png)
@@ -316,13 +318,17 @@ the tree — sticks to its space and comes back with it.
   under a `__label` first line with `__exit <code>` closing it; a failed
   run (no CLI on `PATH`, say) is an exit code in the log and a toast with
   the label and nothing after it. Nothing prunes those logs.
-- **A decision is a Herdr toast the moment it lands.** The watcher reads
-  the sessions folder for a log with `__exit` and no `__told`, posts
-  `notify()` for up to three, and marks each as it goes, so however many
-  copies read at once the toast fires once. A run whose JSON carries
-  `feedback` (not `nothingToSend`, not dismissed) toasts "N annotations —
-  click to copy" with `action: plannotator.copy-last`; the same JSON is read
-  by `recentFeedback` into `lasts`; the footer's `last()` is the newest whose log's `__space` is this space (older logs, with none: whose `__cwd`/target is inside this space's folder). A toast's click copies the run it announced. Paste is `pane.focus` on the
+- **A decision is announced the moment it lands.** The watcher reads
+  the sessions folder for a log with `__exit` and no `__told`, announces up
+  to three, and marks each as it goes, so however many
+  copies read at once the announcement fires once. A run whose JSON carries
+  `feedback` (not `nothingToSend`, not dismissed) gets the panel's own
+  toast popup instead of a `notify()` — a Herdr toast has one whole-body
+  action, and this wants the footer's three — the footer's handle drawn as
+  a card at the window's bottom right, its click copying the run it
+  announced and its buttons copy, paste, put away; the same JSON is read
+  by `recentFeedback` into `lasts`; the footer's `last()` is the newest whose log's `__space` is this space (older logs, with none: whose `__cwd`/target is inside this space's folder). A run without annotations
+  (a failure, say) stays a plain Herdr toast. Paste is `pane.focus` on the
   focused terminal (else `shown`, else the space's agent), a beat, then
   `terminal.paste` of the clipboard — never `hc send`, which presses Return.
   The three buttons do not speak one JSON: `annotate` (a file, a folder —
@@ -346,8 +352,10 @@ the tree — sticks to its space and comes back with it.
 - `mods/plannotator/main.js` — the whole mod, one `View`: no props is the
   panel; `props().mode === "palette"` the palette; `"menu"` a tree row's
   menu; `"picture"` a picture at its own size, which `openPicture` opens as
-  a `dialog` with the file, its size and the `ask` it is handed back. The
-  palette and the menu are `openOverlay` popups closed with
+  a `dialog` with the file, its size and the `ask` it is handed back;
+  `"toast"` the popup a run's annotations arrive in, opened by `openToast`
+  with the run record in its props. The popups are opened with
+  `openOverlay` and closed with
   `closeOverlay(props().overlay)` — the id is not the mod's name. The
   thread page is `TextView.markdown` per message, so the agents' markdown
   arrives as markdown. The reply field is a `TextareaState` with
@@ -547,6 +555,15 @@ the tree — sticks to its space and comes back with it.
   the hand-off. The dialog closes itself with `closeOverlay(props().overlay)`
   — and a copy opened by `mod.open` carries that same prop, so a diagnostic
   copy of the panel that runs the press closes itself.
+- **A task of a copy whose overlay is closing dies with it.** The toast
+  popup closes itself on every press, and its paste is a `spawn` that sleeps
+  a beat between `pane.focus` and `terminal.paste` — closed first, the task
+  would never paste. So the popup's paste runs to its last word and calls
+  `close()` then, and the copy and copy button close after their
+  synchronous work. The same copy put the popup at the window's bottom
+  right from `this.vp`, measured in the panel's render — `window.viewport_size()`
+  is legal from a render, and the task that opens the popup is not one — stacking a second run's popup a card's height above
+  the first.
 
 ## Done when
 
@@ -595,8 +612,9 @@ the tree — sticks to its space and comes back with it.
   in the Inbox; a path that is gone leaves the count, and the count opens
   the same page.
 - Sessions start in the background (no tab, a log per run) and a decision
-  becomes one Herdr toast within the second, panel hidden, `__told`
-  keeping it single.
+  is announced within the second, panel hidden, `__told`
+  keeping it single: a plain one a Herdr toast, one with annotations the
+  panel's own toast popup at the window's bottom right.
 - ↑/↓/Return walk the rows; the field holds every key but Esc while the
   caret is in it; two shown copies make one press one run.
 - Two spaces keep their own thread and open folders, and each comes back

@@ -20,9 +20,11 @@
 // a Herdr toast the moment it lands. Without `tab-host` the declaration is inert and
 // `place: "none"` keeps the mod out of the window.
 //
-// The same mod still draws its own command palette (`props().mode === "palette"`) and
-// a row's menu (`"menu"`) as overlays: the app's palette lists Herdr's commands only,
-// so this is the way in by keyboard. Those two are the only copies that float.
+// The same mod still draws its own command palette (`props().mode === "palette"`),
+// a row's menu (`"menu"`), a picture at its own size (`"picture"`) and the toast
+// popup a run's annotations arrive in (`"toast"`) as overlays: the app's palette
+// lists Herdr's commands only, so this is the way in by keyboard. The first three
+// are opened by a press; the toast is the panel's own doing.
 
 import { View, div, svg, image } from "gpui-kit";
 import { v_flex, h_flex, InputState, Input, TextView, TextareaState, Textarea, EditorState, Editor } from "gpui-base";
@@ -808,8 +810,11 @@ export default class Plannotator extends View {
     this.cardError = null;
     // The annotations runs brought back (`findLast`); the footer holds the newest of this space's.
     this.lasts = [];
-    // The run whose toast was shown last: what a click on it copies, whichever space is up.
-    this.toasted = null;
+    // The window's size, measured in the panel's render (a measurement is legal from a
+    // render, not from the task that opens a toast popup) — where the toast sits.
+    this.vp = null;
+    // The run a toast popup copy was opened with, as its props gave it: its only state.
+    this.toastRun = null;
     // `at` is the palette's highlighted row; `cursor` is the panel's.
     this.cursor = 0;
     // What the shared state key held as this copy last saw it — what it wrote or
@@ -831,6 +836,14 @@ export default class Plannotator extends View {
       cx.timer.after(600, () => this.input.focus());
     }
     if (this.mode === "menu") this.handle.focus();
+    // The toast popup is a copy with one record in its props and nothing else — no
+    // store, no watchers, no fields. It puts itself away the way Herdr's own toast
+    // timed out; a press or a click beside it closes it sooner.
+    if (this.mode === "toast") {
+      this.toastRun = props() ?? {};
+      cx.timer.after(15000, () => this.close());
+      return;
+    }
     // The palette and the menus hold no data of their own: the panel reads the store.
     if (this.mode !== "panel") return;
     // Whatever a last run left copied into the cache is no copy this one is drawing: the
@@ -873,7 +886,7 @@ export default class Plannotator extends View {
         else if (command === "annotate") {
           this.launch(() => (at ? start(["annotate", at], "Annotate all files") : this.pick()));
         } else if (command === "inbox") this.launch(() => openInbox());
-        else if (command === "copy-last") this.copyLast(cx, true);
+        else if (command === "copy-last") this.copyLast(cx);
         else if (command === "paste-last") this.pasteLast(cx);
         cx.notify();
       }
@@ -1830,10 +1843,10 @@ export default class Plannotator extends View {
     if (id) openInbox(`thread=${id}`);
   }
 
-  // A run that ended is announced in Herdr's own toast. The desktop banner said so
-  // when it happened; this says it again the moment a copy of this mod is on screen,
-  // which is the only time a mod can post one — a closed panel has no code at all.
-  // `ANNOUNCE` marks each log it reads, so nothing is announced twice.
+  // A run that ended is announced the moment a copy of this mod is on screen, which is
+  // the only time a mod can post anything — a closed panel has no code at all. The
+  // desktop banner said so when it happened; this says it again here. `ANNOUNCE` marks
+  // each log it reads, so nothing is announced twice.
   announce(cx) {
     cx.spawn(async () => {
       let out;
@@ -1844,18 +1857,17 @@ export default class Plannotator extends View {
       }
       if (out.code !== 0) return;
       const lines = String(out.stdout ?? "").split("\n").filter((s) => s.trim());
+      let n = 0;
       for (const raw of lines.slice(0, 3)) {
         const [file, ...rest] = raw.split("\t");
         const body = rest.join("\t").trim();
-        // A run that left annotations says so, and a click on its toast copies them — a toast
-        // has one action; pasting into a terminal is the footer's.
+        // A run that left annotations gets the panel's own toast popup — Herdr's toast
+        // has one whole-body action, and this wants the footer's three buttons; the
+        // plain ones (a run that failed, say) stay Herdr toasts. A second run's popup
+        // rises above the first.
         const got = await feedbackIn(file);
-        if (got) {
-          notify({ title: "Plannotator", level: "success", timeout: 15000,
-            body: `${got.label}: ${got.count ? `${got.count} ` : ""}${got.count === 1 ? "annotation" : "annotations"} — click to copy`,
-            action: { name: "plannotator.copy-last" } });
-          this.toasted = got;
-        } else notify({ title: "Plannotator", body });
+        if (got) this.openToast(got, n++);
+        else notify({ title: "Plannotator", body });
       }
       if (lines.length > 3) notify({ title: "Plannotator", body: `${lines.length - 3} more in the sessions folder` });
       this.findLast(cx);
@@ -1884,21 +1896,28 @@ export default class Plannotator extends View {
       && (r.space ? r.space === sp?.id : Boolean(at && r.cwd && near(r.cwd, at)))) ?? null;
   }
 
-  copyLast(cx, toast) {
-    const last = toast ? this.toasted ?? this.last() : this.last();
+  copyRun(cx, last) {
     if (!last) return;
     cx.write_to_clipboard(last.words);
     notify({ title: "Plannotator", body: "Annotations copied", level: "success", timeout: 3000 });
   }
 
+  copyLast(cx) {
+    this.copyRun(cx, this.last());
+  }
+
   // Into the terminal the person is on, or the one the space's agent is in: the text is
-  // pasted and left for them to read and send — Return is theirs.
-  pasteLast(cx) {
-    const last = this.last();
+  // pasted and left for them to read and send — Return is theirs. `done` runs when the
+  // words are in, however it went: a toast popup closes only then, because a task of a
+  // copy whose overlay is closed dies with it.
+  pasteRun(cx, last, done) {
     if (!last) return;
     const f = focused();
     const terminal = f?.terminal ?? f?.shown ?? f?.agent;
-    if (!terminal) return fail("No terminal to paste into");
+    if (!terminal) {
+      done?.();
+      return fail("No terminal to paste into");
+    }
     cx.write_to_clipboard(last.words);
     cx.spawn(async () => {
       try {
@@ -1906,13 +1925,61 @@ export default class Plannotator extends View {
         await exec("sh", ["-c", "sleep 0.15"]);
         run("terminal.paste");
       } catch (e) { fail(e?.message); }
+      done?.();
     });
   }
 
-  awayLast(cx) {
-    const last = this.last();
+  pasteLast(cx) {
+    this.pasteRun(cx, this.last());
+  }
+
+  awayLast(cx, last = this.last()) {
     if (last) localStorage.setItem("plannotator.last.away", JSON.stringify([...this.away(), last.file].slice(-50)));
     cx.notify();
+  }
+
+  // ---- the toast popup ----
+
+  // A run's annotations arrive as the panel's own popup instead of a Herdr toast:
+  // the footer's handle drawn as a card over the window, its click copying — the one
+  // thing Herdr's own toast could do — and the footer's three buttons as real buttons.
+  // The record rides in the popup's props, because a popup copy holds none of the
+  // panel's state; it sits at the window's bottom right, where the app's own toasts
+  // show, from the size the panel's last render measured.
+  openToast(got, n) {
+    const W = 360, H = 58, vp = this.vp;
+    const at = vp && vp.width > 0 && vp.height > 0
+      ? { x: Math.max(8, Math.round(vp.width - W - 14)), y: Math.max(8, Math.round(vp.height - H - 14 - n * (H + 8))) }
+      : "pointer";
+    return openOverlay({
+      mod: "plannotator",
+      kind: "popup",
+      width: W,
+      at,
+      props: {
+        mode: "toast",
+        file: got.file, words: got.words, label: got.label,
+        count: got.count, when: got.at,
+      },
+    });
+  }
+
+  toastCopy(cx) {
+    this.copyRun(cx, this.toastRun);
+    this.close();
+  }
+
+  toastPaste(cx) {
+    this.pasteRun(cx, this.toastRun, () => this.close());
+  }
+
+  // The popup puts the run away in the same list the footer reads, and pokes the
+  // shared state once so every copy re-renders and the footer drops it at once —
+  // its own render reads the away set fresh; nobody consumes the value.
+  toastAway(cx) {
+    this.awayLast(cx, this.toastRun);
+    setShared("plannotator.toast", { away: this.toastRun?.file ?? null, at: Date.now() });
+    this.close();
   }
 
   // A folder's children, once: the tree keeps them while it is open.
@@ -1980,7 +2047,10 @@ export default class Plannotator extends View {
     const overlay = props()?.overlay;
     if (!overlay || this.closed) return false;
     this.closed = true;
-    closeOverlay(overlay);
+    // The toast popup can already be gone — a click beside it or Esc closed it at the
+    // app — and its fifteen-second timer still fires; closing a closed overlay is
+    // quietly nothing.
+    try { closeOverlay(overlay); } catch { /* already gone */ }
     return true;
   }
 
@@ -2148,6 +2218,13 @@ export default class Plannotator extends View {
     // And what the picture dialog says back, if one was open when the person pressed
     // Comment: no gesture of theirs is running now, so this is where a hand-off is taken.
     this.takePictureAsk(cx);
+    // Where the window's bottom right is, for the toast popups a run's annotations
+    // arrive in: a measurement is legal from a render and from nowhere else, so the
+    // announce task reads what this left behind.
+    try {
+      const vp = window.viewport_size();
+      if (vp && vp.width > 0 && vp.height > 0) this.vp = vp;
+    } catch { /* no window to measure: the popup opens at the pointer */ }
     const t = theme(), at = this.folder, near = at ? at.replace(home(), "~") : null;
     const waiting = this.threads.slice(0, SHOWN), more = this.threads.length - waiting.length;
     // The chip counts what needs an answer, the one thing the dots say has to be acted on.
@@ -2346,6 +2423,26 @@ export default class Plannotator extends View {
       .child(this.iconButton("pl-last-copy", "copy", (_e, cx) => this.copyLast(cx), OWN))
       .child(this.iconButton("pl-last-paste", "terminal", (_e, cx) => this.pasteLast(cx)))
       .child(this.iconButton("pl-last-away", "x", (_e, cx) => this.awayLast(cx)));
+  }
+
+  // The toast popup: the footer styled as the app's own toast — the same 18 px sides,
+  // the popover ground, a level-coloured dot and two truncated lines — with the
+  // footer's three buttons as real buttons on it and the whole card copying, the way
+  // Herdr's toast did. A press on a button stops the click there so the card's own
+  // copy does not also run; a click beside the popup, Esc or fifteen seconds close it.
+  renderToast() {
+    const t = theme(), r = this.toastRun ?? {};
+    const n = r.count ? `${r.count} ${r.count === 1 ? "annotation" : "annotations"}` : "Annotations";
+    return h_flex().id("pl-toast").w_full().h(58).px(18).gap(12).items_center().bg(t.popover)
+      .cursor_pointer()
+      .on_click((_e, cx) => this.toastCopy(cx))
+      .child(div().size(8).rounded(4).flex_none().bg(t.done))
+      .child(v_flex().flex_1().min_w(0).gap(1)
+        .child(div().truncate().font_semibold().text_size(13).text_color(t.foreground).child(n))
+        .child(div().truncate().text_size(12).text_color(t.muted).child(`${r.label} · ${ago(r.when)}`)))
+      .child(this.iconButton("pl-toast-copy", "copy", (_e, cx) => { cx.stop_propagation(); this.toastCopy(cx); }, OWN, "Copy annotations"))
+      .child(this.iconButton("pl-toast-paste", "terminal", (_e, cx) => { cx.stop_propagation(); this.toastPaste(cx); }, ICONS, "Paste into the terminal"))
+      .child(this.iconButton("pl-toast-away", "x", (_e, cx) => { cx.stop_propagation(); this.toastAway(cx); }, ICONS, "Put away"));
   }
 
   // ---- answering a question ----
@@ -3406,6 +3503,7 @@ export default class Plannotator extends View {
     if (this.mode === "palette") return this.renderPalette();
     if (this.mode === "menu") return this.renderMenu();
     if (this.mode === "picture") return this.renderPicturePage();
+    if (this.mode === "toast") return this.renderToast();
     return this.renderPanel(cx);
   }
 

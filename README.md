@@ -14,11 +14,15 @@ an agent left (Done, Can't do it, a note), reply in words
 without leaving the terminal — and read the files the agent attached to it:
 a picture drawn where it was sent, a document, a code file or a patch one
 click from its own read-only page. When a decision is made in a Plannotator
-session, it arrives as a Herdr toast the second it happens — panel open or
-not. When the session brought back annotations, the toast says how many and a
-click copies them, and the panel's footer holds them: copy them again, or paste
-them into the terminal you are on (pasted, not sent — Return is yours), or put
-the footer away with its ✕. The footer is the newest run with annotations asked
+session, it arrives the second it happens — panel open or not. When the
+session brought back annotations, the panel's own toast popup appears at
+the window's bottom right: how many, from which run, and the footer's
+three buttons on it — a click or the copy button copies them, another
+button pastes them into the terminal you are on (pasted, not sent — Return
+is yours), and the last puts the popup away. The panel's footer holds the
+same run: copy it again, paste it, or put the footer away with its ✕. Any
+other decision — a run that failed, say — is a Herdr toast. The footer is
+the newest run with annotations asked
 for from this space — other spaces' annotations don't show in it — read from the
 session logs, so it is there after a restart too.
 
@@ -125,7 +129,7 @@ reach the panel while its tab is showing.
 Herdr keeps a block's copy alive once it has started, shown or hidden. The
 panel lives in the side panel's stack, so after the button has been pressed
 once the mod runs for the rest of the session: the sessions folder stays
-watched, and a decision becomes a Herdr toast within the second. Only a
+watched, and a decision is announced within the second. Only a
 copy nobody has shown yet is deferred — after a restart, the first decision
 waits for one press of the button (or `cmd-alt-i`).
 
