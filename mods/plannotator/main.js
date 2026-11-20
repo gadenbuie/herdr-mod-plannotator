@@ -2009,7 +2009,7 @@ export default class Plannotator extends View {
     // A thread, open: the way to the Inbox on it, then the way back. The thread's own
     // messages are not rows — they are what the person came to read, and nothing in
     // them launches.
-    if (this.opened) return ["respond", "back"];
+    if (this.opened) return ["open", "back"];
     const ids = [];
     for (let i = 0; i < Math.min(this.threads.length, SHOWN); i++) ids.push(`t${i}`);
     if (this.threads.length > SHOWN) ids.push("more");
@@ -2032,7 +2032,7 @@ export default class Plannotator extends View {
     }
     if (this.opened) {
       if (id === "back") this.back(cx);
-      if (id === "respond") this.respond();
+      if (id === "open") this.respond();
       return;
     }
     if (/^t\d+$/.test(id)) return this.launch(() => this.openThread(this.threads[Number(id.slice(1))]?.id, cx));
@@ -2088,11 +2088,14 @@ export default class Plannotator extends View {
     cx?.notify();
   }
 
-  iconButton(id, icon, action, from = ICONS) {
+  iconButton(id, icon, action, from = ICONS, label) {
     const t = theme();
     return div().id(id).size(24).flex_none().flex().items_center().justify_center().rounded(6)
       .text_color(t.muted).hover((s) => s.bg(t.hover).text_color(t.foreground))
       .on_click(action)
+      // The label is the pointer's reason and the screen reader's: a tooltip alone
+      // announces nothing.
+      .when(Boolean(label), (el) => el.tooltip(label).accessibility_label(label))
       .child(svg(`${from}/${icon}.svg`).size(14));
   }
 
@@ -2261,7 +2264,9 @@ export default class Plannotator extends View {
           .child(div().flex_1()))
         .child(this.iconButton("pl-palette", "search", () => this.openPalette()))
         // One page, so one button: the Inbox on the thread that is open, or on its list.
-        .child(this.iconButton("pl-open", "file-text", () => this.launch(() => (this.opened ? this.respond() : openInbox())))))
+        .child(this.iconButton("pl-open", "file-text", () => this.launch(() => (this.opened ? this.respond() : openInbox())), ICONS,
+          "Open in Inbox for picks and pictures")
+          .when(sel("open"), (el) => el.bg(t.selected))))
       // The list scrolls as one box. A thread page is not that box: it pins what the
       // thread is at the top and the way to answer it at the bottom, and scrolls only
       // the conversation between them, so the scrollbar there belongs to the middle.
@@ -2975,11 +2980,6 @@ export default class Plannotator extends View {
     }
     const earlier = messages.slice(0, cut);
     const at = th ? Date.parse(th.messages?.[0]?.created_at) : NaN;
-    const respond = (id, icon, label) => h_flex().id(`pl-a-${id}`).h(30).flex_none().px(14).gap(9).items_center()
-      .when(sel(id), (el) => el.bg(t.selected))
-      .hover((s) => s.bg(t.hover)).cursor_pointer().on_click(() => this.respond())
-      .child(svg(`${ICONS}/${icon}.svg`).size(14).flex_none().text_color(t.muted))
-      .child(div().flex_1().min_w(0).truncate().text_color(sel(id) ? t.foreground : t.muted).child(label));
     // The reply: a field, and a Send beside it. The words go to the agent that spoke last,
     // with every answer the cards have picked and not sent — `questions` names them, and the
     // Inbox holds the answers themselves. Pictures, tags and resolves stay in the page,
@@ -3045,10 +3045,10 @@ export default class Plannotator extends View {
         .child([th?.project?.name, Number.isFinite(at) ? ago(at) : null].filter(Boolean).join(" · ")));
     if (th) {
       const read = this.opened?.row?.read_at != null;
-      head.child(this.iconButton("pl-copy-id", "copy", (_e, cx) => this.copyThreadId(cx), OWN));
+      head.child(this.iconButton("pl-copy-id", "copy", (_e, cx) => this.copyThreadId(cx), OWN, "Copy thread ID"));
       head.child(this.iconButton(`pl-read-toggle-${read ? "unread" : "read"}`, read ? "mail-open" : "mail",
-        (_e, cx) => this.setRead(!read, cx), OWN));
-      head.child(this.iconButton("pl-archive", "archive", (_e, cx) => this.archiveThread(cx)));
+        (_e, cx) => this.setRead(!read, cx), OWN, read ? "Mark unread" : "Mark read"));
+      head.child(this.iconButton("pl-archive", "archive", (_e, cx) => this.archiveThread(cx), ICONS, "Archive thread"));
     }
     return v_flex().id("pl-thread").flex_1().min_h(0).w_full().max_w(760)
       .child(head)
@@ -3067,12 +3067,12 @@ export default class Plannotator extends View {
         .children(messages.slice(cut).map((m) => this.renderMessage(m)))
         .when(Boolean(th) && messages.length === 0,
           (el) => el.child(div().px(14).py(6).text_color(t.muted).child("This thread has no messages."))))
-      // No bottom padding: the page row is the page's last pixel, sitting on the panel's
+      // No bottom padding: the reply band is the page's last pixel, sitting on the panel's
       // own edge the way the tab bar's rows do. The card's rounding clips it, and the
-      // field's own 6 px is what separates the row from the box above it.
-      .child(v_flex().id("pl-thread-foot").flex_none().w_full().pt(2).border_t(1).border_color(t.border)
-        .when(full, (el) => el.child(field()))
-        .child(respond("respond", "file-text", "Open in Inbox for picks and pictures")));
+      // field's own 6 px is what separates the band from the box above it. The way to the
+      // page for picks and pictures is the top bar's button now, not a row of its own.
+      .when(full, (el) => el.child(v_flex().id("pl-thread-foot").flex_none().w_full().pt(2).border_t(1)
+        .border_color(t.border).child(field())));
   }
 
   // One message: the author and its age, then its words. The person's own are boxed so a

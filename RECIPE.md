@@ -60,8 +60,10 @@ the tree — sticks to its space and comes back with it.
   field grows 2→8 rows, Send goes live for words or a picked answer or a
   marked action, and
   the line under it says what the Send carries: "1 answer goes with this
-  reply", "1 answer and 1 task"), and last an "Open in Inbox for picks
-  and pictures" row. A comment on the words sits in that band above the
+  reply", "1 answer and 1 task"); the "Open in Inbox for picks and
+  pictures" row is gone — the top bar's file-text button is the way there,
+  its tooltip carrying the words, and Return's row with it. A comment on
+  the words sits in that band above the
   field — the quote it stands for, its own words, and a ✕ — until the Send
   carries it. Pictures
   written into the words are drawn where they were written — between the
