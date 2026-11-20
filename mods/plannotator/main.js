@@ -2606,6 +2606,9 @@ export default class Plannotator extends View {
   // A pick is the Inbox's to keep: a click saves it there (`savePick`), and the reply's
   // Send names it. So a card is answered but unsent until the Send at the bottom of the
   // page — "Picked, not sent" in `accent` — and settled once it has gone — "Answered".
+  // A skip is a record of the same shape that names no choice (`answer.skipped`, a note
+  // beside it is welcome): the page's Skip button writes one, and it travels with the Send
+  // like a pick does — "Skipped, not sent" before, "Skipped" in `dim` once it has gone.
   //
   // An action (`:::action`, the todo the agent left) is the same card with a different
   // body: where it happens, the two marks — Done and Can't do it — and the note they
@@ -2619,6 +2622,7 @@ export default class Plannotator extends View {
     // has not gone out is still theirs to change, so it stays open here.
     const frozen = Boolean(q?.set_aside_at) || Boolean(q?.superseded_by) || sent;
     const picked = Boolean(q?.answer);
+    const skipped = Boolean(q?.answer?.skipped);
     const action = q?.kind === "action";
     // An action's result is its answer: what was done, the note it carried, when. A marked
     // action whose Send has carried it is settled — until then it is still theirs to change.
@@ -2628,13 +2632,13 @@ export default class Plannotator extends View {
       : q?.superseded_by ? "Replaced"
       : action
         ? (result ? `${result.outcome === "done" ? "Done" : "Can't do it"}${settled ? "" : " · not sent"}` : "Waiting on you")
-      : sent ? "Answered"
-      : picked ? "Picked, not sent"
+      : sent ? (skipped ? "Skipped" : "Answered")
+      : picked ? (skipped ? "Skipped, not sent" : "Picked, not sent")
       : "Waiting on you";
     const tone = q?.set_aside_at || q?.superseded_by ? t.dim
       : action
         ? (result ? (settled ? (result.outcome === "done" ? t.done : t.dim) : t.accent) : t.working)
-      : sent ? t.done
+      : sent ? (skipped ? t.dim : t.done)
       : picked ? t.accent
       : t.working;
     const p = this.pickedFor(m, q);

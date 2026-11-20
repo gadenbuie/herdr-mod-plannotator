@@ -168,12 +168,16 @@ the tree — sticks to its space and comes back with it.
   keeps, so a pick here follows to the browser and back. The reply's Send
   POSTs `messages/<id>/reply` with `words`, the picked answers named
   `{message_id, key, revision}`, an `idempotency_key`, and
-  `seen_through_seq` — the newest seq drawn. Picks alone are a reply. If
+  `seen_through_seq` — the newest seq drawn. Picks alone are a reply. A
+  skip the page wrote — `answer.skipped`, no choice named, a note beside
+  it is welcome — is a record of the same shape: the card reads "Skipped"
+  in `dim` once its Send has carried it, "Skipped, not sent" before. If
   the agent wrote after what was drawn, the Inbox refuses with
   `thread_moved_on`: nothing sends, the words stay in the field, the
   thread re-reads to show what moved it. **This is the whole write
   surface** — a cursor, an answer's draft, a reply, a comment, a mark. No
-  resolve, upload, tag, handoff or skip leaves the panel.
+  resolve, upload, tag or handoff leaves the panel, and no skip is made
+  here: the page's Skip button writes the record, the panel reads it.
 - **An action is the todo the agent left, answered here.** `:::action`
   comes out of the words like a question fence and draws as its own card
   from the `questions` record: its context, its `Where:` link (opened in
