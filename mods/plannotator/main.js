@@ -2410,6 +2410,24 @@ export default class Plannotator extends View {
       .child(div().text_size(11).text_color(t.dim).child(label));
   }
 
+  // The card's bottom row, the page's: Skip on the left, and, when the recommendation
+  // names one of the choices, Accept recommended on the right — the one button on the card
+  // that reads as a button, because taking the recommendation is the answer it asks for.
+  answerRow(m, q, recLabel) {
+    const t = theme();
+    return h_flex().w_full().flex_none().gap(8).items_center()
+      .child(h_flex().id(`pl-qs-${m?.id}-${q?.key}`).h(20).flex_none().px(4).gap(5).items_center()
+        .rounded(4).cursor_pointer().hover((s) => s.bg(t.hover))
+        .on_click((_e, cx) => this.saveSkip(m, q, cx))
+        .child(div().text_size(11).text_color(t.muted).child("Skip")))
+      .when(Boolean(recLabel), (el) => el.child(div().flex_1())
+        .child(h_flex().id(`pl-qr-${m?.id}-${q?.key}`).h(24).flex_none().px(9).items_center()
+          .rounded(6).bg(t.selected).text_color(t.accent).cursor_pointer()
+          .hover((s) => s.bg(t.accent).text_color(t.accent_foreground))
+          .on_click((_e, cx) => this.acceptRecommended(m, q, recLabel, cx))
+          .child(div().text_size(11.5).child("Accept recommended"))));
+  }
+
   // ---- answering a question ----
 
   // A pick, saved where the page saves it: `POST messages/<id>/picks` is the Inbox's own
@@ -2453,6 +2471,52 @@ export default class Plannotator extends View {
       });
     });
     this.watch(id, m, work, cx);
+  }
+
+  // The page's Skip button, on the card here too: a record of the same shape that names no
+  // choice — `selected: []`, `skipped: true` — posted to the same draft a pick goes to, and
+  // carried out by the reply's Send like one. A note typed in the open field goes with it,
+  // and one the record already holds stays when the field is closed. A skip is an answer
+  // like any other: what the person does after it — a ring, an own option, another skip —
+  // replaces it, so there is no way back to write.
+  saveSkip(m, q, cx) {
+    const id = `${m?.id}/${q?.key}`;
+    const before = this.saving.get(id) ?? Promise.resolve();
+    const work = before.catch(() => {}).then(() => {
+      const current = this.recordOf(m, q) ?? q;
+      const field = this.fields.get(this.fieldId(m, q, "note"));
+      const note = String(field ? field.value() : current?.answer?.note ?? "").trim();
+      const answer = {
+        v: 1, key: current.key, kind: current.kind, prompt: current.prompt,
+        selected: [], skipped: true,
+        ...(note ? { note } : {}),
+      };
+      return asked("POST", `messages/${m.id}/picks`, {
+        questions: [{ key: current.key, revision: current.revision, answer }],
+      }).then((data) => {
+        // The questions as the Inbox now holds them are the panel's copy, and what a skip
+        // sweeps away is swept here too: an own option or written answer the fields still
+        // hold would draw as if it were going out, and it is not.
+        const msg = this.opened?.thread?.messages?.find((x) => x?.id === m?.id);
+        if (msg && Array.isArray(data?.questions)) {
+          msg.questions = data.questions.filter((x) => x?.key);
+          this.fields.get(this.fieldId(m, q, "other"))?.set_value("");
+          this.fields.get(this.fieldId(m, q, "text"))?.set_value("");
+          const p2 = this.picked.get(id);
+          if (p2) p2.dirty = false;
+        }
+        return data;
+      });
+    });
+    this.watch(id, m, work, cx);
+  }
+
+  // The recommendation, taken: the choice it names is picked the way a click picks it —
+  // `toggleChoice` saves the same draft — and a ring already on it has nothing to take.
+  acceptRecommended(m, q, label, cx) {
+    if (!label) return;
+    if (this.pickedFor(m, q).selected.includes(label)) return;
+    this.toggleChoice(m, q, label, cx);
   }
 
   // What both saves share once the request is out: one at a time per card (`saving`, the
@@ -2607,8 +2671,9 @@ export default class Plannotator extends View {
   // Send names it. So a card is answered but unsent until the Send at the bottom of the
   // page — "Picked, not sent" in `accent` — and settled once it has gone — "Answered".
   // A skip is a record of the same shape that names no choice (`answer.skipped`, a note
-  // beside it is welcome): the page's Skip button writes one, and it travels with the Send
-  // like a pick does — "Skipped, not sent" before, "Skipped" in `dim` once it has gone.
+  // beside it is welcome): the card's own Skip writes one, as the page's does, and it
+  // travels with the Send like a pick does — "Skipped, not sent" before, "Skipped" in
+  // `dim` once it has gone.
   //
   // An action (`:::action`, the todo the agent left) is the same card with a different
   // body: where it happens, the two marks — Done and Can't do it — and the note they
@@ -2665,7 +2730,8 @@ export default class Plannotator extends View {
     // recommendation that names no choice — a sentence rather than an option.
     const rec = String(q?.recommendation ?? "").trim();
     const isRecommended = (c) => Boolean(rec) && String(c?.label ?? "").trim().toLowerCase() === rec.toLowerCase();
-    const recIsChoice = (q?.choices ?? []).some(isRecommended);
+    const recChoice = (q?.choices ?? []).find(isRecommended);
+    const recIsChoice = Boolean(recChoice);
     const recommendedTag = (past) => div().flex_none().px(5).py(1).rounded(99).bg(t.selected)
       .child(div().text_size(9.5).text_color(past ? t.dim : t.accent).child("Recommended"));
     // A choice of the question's own. Clicking one is a pick; on a card that is frozen it is
@@ -2718,6 +2784,10 @@ export default class Plannotator extends View {
         // note beside it is not the same thing.
         .when(editable && q?.kind === "text", (el) => el.child(this.fieldRow(m, q, "text", "Write your answer")))
         .when(editable || openAction, (el) => el.child(this.fieldRow(m, q, "note", "Add a note")))
+        // The card's own row of ways to move on, the page's bottom row drawn the panel's
+        // way: Skip writes the skipped record, and, when the recommendation names one of
+        // the choices, Accept recommended picks it — both saved at once, like a ring is.
+        .when(editable, (el) => el.child(this.answerRow(m, q, recChoice?.label)))
         // An action's own rows: where it happens — a link the click opens in the person's
         // browser — the two marks, the way back off one, and what the agent is watching
         // for. The marks are chips, the one the action already wears filled in; a mark
