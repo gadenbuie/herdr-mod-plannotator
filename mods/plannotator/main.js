@@ -359,6 +359,8 @@ function readThreads(data) {
         at: Date.parse(row.last_at) || Date.parse(row.created_at) || 0,
         subject: row.subject || row.thread_name || "(no subject)",
         state: stateOf(section.id),
+        read: row.read_at != null,
+        resolved: row.resolved_at != null,
         project: {
           key: project.id ?? project.name ?? "",
           name: project.name ?? "",
@@ -915,6 +917,58 @@ export default class Plannotator extends View {
 
   // ---- one thread ----
 
+  // The page's Mark read and Mark unread, one button on the thread's head: the click asks
+  // for the other of the state the envelope shows. Mark read is the one the page warns
+  // about — it sets aside every open question with a skip answer — and the endpoint does
+  // that by itself; the list and the thread row are read again at once, though the store
+  // watcher would bring them anyway.
+  setRead(read, cx) {
+    const id = this.opened?.id;
+    if (!id) return;
+    cx?.spawn(async (cx) => {
+      try {
+        await asked("POST", `threads/${id}/${read ? "read" : "mark-unread"}`, {});
+        await this.refreshList();
+        if (this.opened?.id === id) {
+          this.opened.row = { ...(this.opened.row ?? {}), read_at: read ? new Date().toISOString() : null };
+          this.loadThread(cx);
+        }
+      } catch (e) {
+        notify({ title: "Plannotator", body: String(e?.message ?? e).split("\n")[0], level: "error" });
+      }
+      cx.notify();
+    });
+  }
+
+  // The page's Archive thread. The route is the page's own — `messages/<id>/resolve`, a
+  // thread id in the message route, `{resolved: true}` — and the same call with
+  // `resolved: false` takes a thread back, though an archived one is nowhere the panel
+  // could press that. An archived thread is in no bucket of the list, so the panel goes
+  // back to its own list; the archive is the page's toast, not a question asked here.
+  archiveThread(cx) {
+    const id = this.opened?.id;
+    if (!id) return;
+    cx?.spawn(async (cx) => {
+      try {
+        await asked("POST", `messages/${id}/resolve`, { resolved: true });
+        await this.refreshList();
+      } catch (e) {
+        notify({ title: "Plannotator", body: String(e?.message ?? e).split("\n")[0], level: "error" });
+        return;
+      }
+      this.back(cx);
+    });
+  }
+
+  // The list, read again where a change of the thread's own state makes it stale: the
+  // buckets are the Inbox's, and a read, an unread or an archive moves the row between
+  // them. The badge travels with it, the way `reload` writes it.
+  async refreshList() {
+    this.threads = readThreads(await asked("GET", "threads"));
+    const want = this.threads.filter((t) => t.state === "answer").length;
+    if (shared(BADGE) !== want) setShared(BADGE, want);
+  }
+
   // A thread, opened in the panel. Its words are read from the Inbox's own window
   // model (`GET threads/<id>`, the request its page makes for a thread) rather than
   // from the store: the records say what was written, not what it adds up to.
@@ -923,7 +977,7 @@ export default class Plannotator extends View {
     // copies of that thread's pictures.
     this.releaseViewer();
     if (this.opened?.id && this.opened.id !== id) this.prune(this.opened.id);
-    this.opened = { id, thread: null, error: null };
+    this.opened = { id, thread: null, row: null, error: null };
     this.cursor = 0;
     // A new thread starts with an empty field: what was half-written in another one is
     // not this thread's reply, and the Inbox's own page keeps a draft per thread rather
@@ -1077,6 +1131,7 @@ export default class Plannotator extends View {
         if (this.opened?.id !== id) return;
         if (!Array.isArray(data?.thread?.messages)) throw new Error("The Inbox answered in an unknown shape");
         this.opened.thread = data.thread;
+        this.opened.row = data.row ?? null;
         this.opened.error = null;
         // How many comments this thread's draft in the Inbox holds. Some of them may have
         // been made in the browser, or on this thread in a past run of the panel, so the
@@ -1104,9 +1159,9 @@ export default class Plannotator extends View {
   // does: the Inbox's own `seen` cursor moves to the newest message drawn, and its
   // blue "new since you looked" dot goes with it. It is deliberately not Mark read.
   // That one also sets aside every open question the person leaves unanswered — the
-  // agent is told they skipped it — and a panel that cannot show the picks has no
-  // business making that call: a thread with an open question stays yellow until it
-  // is answered or marked read in the Inbox.
+  // agent is told they skipped it — and it stays the head button's own press: a
+  // thread with an open question stays yellow until it is answered, marked read in
+  // the page, or marked read here on purpose.
   markSeen(id, messages, row) {
     if (!(row?.unseen > 0)) return;
     const newest = newestSeqOf(messages);
@@ -1744,7 +1799,7 @@ export default class Plannotator extends View {
     const id = typeof st.thread === "string" && st.thread ? st.thread : null;
     if (id && id !== this.opened?.id) {
       this.releaseViewer();
-      this.opened = { id, thread: null, error: null };
+      this.opened = { id, thread: null, row: null, error: null };
       this.reply = null;
       this.writing = false;
       this.showAll = Boolean(st.showAll);
@@ -2981,13 +3036,20 @@ export default class Plannotator extends View {
     // messages with no idea whose thread they are, and a field that scrolled away would
     // have to be found before every reply.
     // The head carries the thread's id at its right, one press away while the thread is
-    // on screen. Only when the thread has loaded: an id the read failed to bring has
-    // nothing to copy.
+    // on screen, then the page's read/unread and archive after it: the envelope says the
+    // state — a closed one is unread, an open one read — and the box archives. Only when
+    // the thread has loaded: an id the read failed to bring has nothing to copy.
     const head = h_flex().id("pl-thread-head").h(26).flex_none().px(14).gap(6).items_center().border_b(1)
       .border_color(t.border)
       .child(div().flex_1().min_w(0).truncate().text_size(11).text_color(t.dim)
         .child([th?.project?.name, Number.isFinite(at) ? ago(at) : null].filter(Boolean).join(" · ")));
-    if (th) head.child(this.iconButton("pl-copy-id", "copy", (_e, cx) => this.copyThreadId(cx), OWN));
+    if (th) {
+      const read = this.opened?.row?.read_at != null;
+      head.child(this.iconButton("pl-copy-id", "copy", (_e, cx) => this.copyThreadId(cx), OWN));
+      head.child(this.iconButton(`pl-read-toggle-${read ? "unread" : "read"}`, read ? "mail-open" : "mail",
+        (_e, cx) => this.setRead(!read, cx), OWN));
+      head.child(this.iconButton("pl-archive", "archive", (_e, cx) => this.archiveThread(cx)));
+    }
     return v_flex().id("pl-thread").flex_1().min_h(0).w_full().max_w(760)
       .child(head)
       .child(v_flex().id("pl-thread-scroll").flex_1().min_h(0).w_full().overflow_y_scrollbar().py(4)

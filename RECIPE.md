@@ -43,7 +43,14 @@ the tree — sticks to its space and comes back with it.
 - **The row the keys are on** is filled `selected`; it starts on the thread
   that most needs the person, or "Last message" when the Inbox is empty.
 - **A thread, opened**, replaces the list as a page: a pinned crumb
-  (project · age), a scrolling middle of messages — each drawn as markdown
+  (project · age) with the thread's id copy, a read/unread toggle and an
+  archive button at its right — the page's own calls (`threads/<id>/read`,
+  `threads/<id>/mark-unread`, `messages/<id>/resolve` with the thread id in
+  the message route, `{resolved: true}`), the envelope saying the state and
+  the click asking for the other; mark read sets every open question with a
+  skip answer aside the way the page's does, and an archived thread is in no
+  bucket of the list, so the panel goes back to its own — a scrolling middle
+  of messages — each drawn as markdown
   with its author line, the person's own boxed with a 2 px `accent` rule
   down the left — their questions as cards (a dot and the state in its
   colour, ringed choices, a "Recommended" chip on the choice it names, and
@@ -158,11 +165,11 @@ the tree — sticks to its space and comes back with it.
   Herdr: spaces, focus, theme and the space's folder arrive by themselves.
 - **Reading a thread is `seen`, never `read`.** Opening it POSTs
   `threads/<id>/seen` with the newest drawn seq — exactly what the Inbox
-  page does — so the blue dot goes and nothing else moves. The Inbox's own
-  Mark read also sets aside every open question with a skip answer; that
-  is the person's decision, made on a page that can show the picks, never
-  a side effect of opening a thread here. A thread with an unanswered
-  question stays yellow, and the badge keeps counting it.
+  page does — so the blue dot goes and nothing else moves. Mark read is the
+  thread head's own toggle (the envelope beside the copy button, archive
+  beside it): the person presses it, the endpoint sets every open question
+  with a skip answer aside as the page's does, and a thread with an open
+  question stays yellow until then — the badge keeps counting it.
 - **Picks are the Inbox's drafts, saved as they are made.** A click on a
   ring POSTs `messages/<id>/picks` — the same draft the Inbox's own page
   keeps, so a pick here follows to the browser and back. The reply's Send
