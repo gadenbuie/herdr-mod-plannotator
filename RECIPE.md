@@ -325,8 +325,9 @@ the tree — sticks to its space and comes back with it.
   `feedback` (not `nothingToSend`, not dismissed) gets the panel's own
   toast popup instead of a `notify()` — a Herdr toast has one whole-body
   action, and this wants the footer's three — the footer's handle drawn as
-  a card at the window's bottom right, its click copying the run it
-  announced and its buttons copy, paste, put away; the same JSON is read
+  a card at the window's bottom right, its click going to the space the
+  run was asked from (the log's `__space`, `space.select`) with the panel
+  open there, and its buttons copy, paste, put away; the same JSON is read
   by `recentFeedback` into `lasts`; the footer's `last()` is the newest whose log's `__space` is this space (older logs, with none: whose `__cwd`/target is inside this space's folder). A run without annotations
   (a failure, say) stays a plain Herdr toast. Paste is `pane.focus` on the
   focused terminal (else `shown`, else the space's agent), a beat, then
@@ -559,11 +560,15 @@ the tree — sticks to its space and comes back with it.
   popup closes itself on every press, and its paste is a `spawn` that sleeps
   a beat between `pane.focus` and `terminal.paste` — closed first, the task
   would never paste. So the popup's paste runs to its last word and calls
-  `close()` then, and the copy and copy button close after their
-  synchronous work. The same copy put the popup at the window's bottom
-  right from `this.vp`, measured in the panel's render — `window.viewport_size()`
-  is legal from a render, and the task that opens the popup is not one — stacking a second run's popup a card's height above
-  the first.
+  `close()` then, and the copy button closes after its synchronous work.
+  The card's own click goes further: `space.select`, a beat for the switch
+  to land, then the layout is read (`modShown`) and the panel opened only
+  when it is closed in this one — `tab-host.toggle:plannotator`, or the
+  plain `layout.toggle:panel` without tab-host; the toggle would close a
+  panel that is open. The popup sits at the window's bottom right from
+  `vpSize` — the window measured where the popup is opened when it answers
+  a measurement there, else what the panel's last render cached — stacking
+  a second run's popup a card's height above the first.
 
 ## Done when
 

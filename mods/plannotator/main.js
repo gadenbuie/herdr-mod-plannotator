@@ -31,7 +31,7 @@ import { v_flex, h_flex, InputState, Input, TextView, TextareaState, Textarea, E
 import {
   spaces, focused, panes, exec, run, theme, props, openOverlay, closeOverlay,
   notify, watchFolder, pickFolder, home, appHome, nextCommand, keys, shared, setShared,
-  readTextFile,
+  readTextFile, layout,
 } from "herdr";
 
 const ICONS = "mods/workspace-chrome";
@@ -222,6 +222,25 @@ done`;
 // Two shown copies (the panel and a tab of the same mod) both get a key command;
 // one press must start one run.
 let claimed = 0;
+
+// Whether the shown layout draws a mod's block: true when every stack above it
+// shows its line and no ancestor hides it, false when the block is there but
+// put away, null when this layout has no such block. The two facts tab-host's
+// own toggle reads before it shows a tab, read here so a popup copy can decide
+// whether opening means showing or leaving alone.
+function modShown(name) {
+  let seen = null;
+  const walk = (node, hidden, stacked) => {
+    if (!node || typeof node !== "object" || seen !== null) return;
+    hidden = hidden || Boolean(node.hidden);
+    const kids = Array.isArray(node.children) ? node.children : [];
+    if (node.type === "stack") for (const child of kids) walk(child, hidden, stacked && node.active === child.id);
+    else for (const child of kids) walk(child, hidden, stacked);
+    if (node.content?.mod === name) seen = !hidden && Boolean(stacked);
+  };
+  try { walk(layout(), false, true); } catch { seen = null; }
+  return seen;
+}
 
 // How many waiting threads the panel lists; the rest are one row into the Inbox.
 const SHOWN = 5;
@@ -1940,14 +1959,25 @@ export default class Plannotator extends View {
 
   // ---- the toast popup ----
 
+  // Where the toast popup goes: the window's size measured now when the window
+  // answers a measurement outside a render, else the one the panel's last render
+  // cached, else null and the popup opens at the pointer.
+  vpSize() {
+    try {
+      const vp = window.viewport_size();
+      if (vp && vp.width > 0 && vp.height > 0) return vp;
+    } catch { /* a measurement is a render's to make */ }
+    return this.vp && this.vp.width > 0 ? this.vp : null;
+  }
+
   // A run's annotations arrive as the panel's own popup instead of a Herdr toast:
-  // the footer's handle drawn as a card over the window, its click copying — the one
-  // thing Herdr's own toast could do — and the footer's three buttons as real buttons.
-  // The record rides in the popup's props, because a popup copy holds none of the
-  // panel's state; it sits at the window's bottom right, where the app's own toasts
-  // show, from the size the panel's last render measured.
+  // the footer's handle drawn as a card over the window, its click going to the
+  // space the run was asked from with the panel open, and the footer's three
+  // buttons as real buttons. The record rides in the popup's props, because a popup
+  // copy holds none of the panel's state; it sits at the window's bottom right,
+  // where the app's own toasts show.
   openToast(got, n) {
-    const W = 360, H = 58, vp = this.vp;
+    const W = 360, H = 58, vp = this.vpSize();
     const at = vp && vp.width > 0 && vp.height > 0
       ? { x: Math.max(8, Math.round(vp.width - W - 14)), y: Math.max(8, Math.round(vp.height - H - 14 - n * (H + 8))) }
       : "pointer";
@@ -1959,7 +1989,7 @@ export default class Plannotator extends View {
       props: {
         mode: "toast",
         file: got.file, words: got.words, label: got.label,
-        count: got.count, when: got.at,
+        count: got.count, when: got.at, space: got.space,
       },
     });
   }
@@ -1967,6 +1997,26 @@ export default class Plannotator extends View {
   toastCopy(cx) {
     this.copyRun(cx, this.toastRun);
     this.close();
+  }
+
+  // The card's click: to the space the run was asked from — the log's `__space`, when
+  // it carries one and a space by that id exists — and the panel open, where its
+  // footer holds the annotations. The panel is opened the way its button does, and
+  // only when it is not already showing here: the toggle would close one that is.
+  // The switch takes a frame to land, so the layout is read after a beat, and the
+  // popup closes when the going is done — a task of a copy whose overlay is closed
+  // dies with it.
+  toastGo(cx) {
+    const id = this.toastRun?.space ?? null;
+    cx.spawn(async () => {
+      if (id && spaces().some((s) => s.id === id)) run("space.select", { id });
+      await exec("sh", ["-c", "sleep 0.25"]);
+      if (modShown("plannotator") === false) {
+        if (modShown("tab-host") !== null) run("tab-host.toggle:plannotator");
+        else run("layout.toggle:panel");
+      }
+      this.close();
+    });
   }
 
   toastPaste(cx) {
@@ -2427,15 +2477,16 @@ export default class Plannotator extends View {
 
   // The toast popup: the footer styled as the app's own toast — the same 18 px sides,
   // the popover ground, a level-coloured dot and two truncated lines — with the
-  // footer's three buttons as real buttons on it and the whole card copying, the way
-  // Herdr's toast did. A press on a button stops the click there so the card's own
-  // copy does not also run; a click beside the popup, Esc or fifteen seconds close it.
+  // footer's three buttons as real buttons on it. The card's own click goes to the
+  // space the run was asked from and opens the panel there; a press on a button stops
+  // the click there so the card's own one does not also run; a click beside the
+  // popup, Esc or fifteen seconds close it.
   renderToast() {
     const t = theme(), r = this.toastRun ?? {};
     const n = r.count ? `${r.count} ${r.count === 1 ? "annotation" : "annotations"}` : "Annotations";
     return h_flex().id("pl-toast").w_full().h(58).px(18).gap(12).items_center().bg(t.popover)
       .cursor_pointer()
-      .on_click((_e, cx) => this.toastCopy(cx))
+      .on_click((_e, cx) => this.toastGo(cx))
       .child(div().size(8).rounded(4).flex_none().bg(t.done))
       .child(v_flex().flex_1().min_w(0).gap(1)
         .child(div().truncate().font_semibold().text_size(13).text_color(t.foreground).child(n))

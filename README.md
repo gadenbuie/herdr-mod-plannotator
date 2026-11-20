@@ -17,9 +17,11 @@ click from its own read-only page. When a decision is made in a Plannotator
 session, it arrives the second it happens — panel open or not. When the
 session brought back annotations, the panel's own toast popup appears at
 the window's bottom right: how many, from which run, and the footer's
-three buttons on it — a click or the copy button copies them, another
-button pastes them into the terminal you are on (pasted, not sent — Return
-is yours), and the last puts the popup away. The panel's footer holds the
+three buttons on it — a click takes you to the space the run served with
+the panel open (its footer holds the annotations there), the copy button
+copies them, another button pastes them into the terminal you are on
+(pasted, not sent — Return is yours), and the last puts the popup away.
+The panel's footer holds the
 same run: copy it again, paste it, or put the footer away with its ✕. Any
 other decision — a run that failed, say — is a Herdr toast. The footer is
 the newest run with annotations asked
